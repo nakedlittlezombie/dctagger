@@ -1,5 +1,6 @@
 import type { AlbumFolder, PublicSettings, SessionView } from "../../packages/model/types";
 import { renderFileName, renderFolderPath } from "../../packages/naming";
+import { missingTrackCount } from "../album-stats";
 import { AlbumThumb } from "../components/AlbumThumb";
 import { ProgressBar } from "../components/ProgressBar";
 
@@ -17,8 +18,9 @@ function targetPreview(albums: AlbumFolder[], settings: PublicSettings): string 
   const album = albums[0];
   if (!album) return null;
   const candidate =
-    album.candidates.find((entry) => entry.release.id === album.selectedReleaseId) ??
-    album.candidates[0];
+    [...album.candidates, ...album.deezerCandidates].find(
+      (entry) => entry.release.id === album.selectedReleaseId,
+    ) ?? album.candidates[0] ?? album.deezerCandidates[0];
   if (!candidate) return album.folderName;
   const release = candidate.release;
   const artist = release.artists.map((entry) => entry.name).join(" & ") || "Unknown Artist";
@@ -277,8 +279,12 @@ export function ApplyView({
               <div className="pending-list">
                 {pending.map((album) => {
                   const candidate =
-                    album.candidates.find((entry) => entry.release.id === album.selectedReleaseId) ??
-                    album.candidates[0];
+                    [...album.candidates, ...album.deezerCandidates].find(
+                      (entry) => entry.release.id === album.selectedReleaseId,
+                    ) ??
+                    album.candidates[0] ??
+                    album.deezerCandidates[0];
+                  const missing = missingTrackCount(album);
                   return (
                     <button
                       key={album.id}
@@ -294,6 +300,14 @@ export function ApplyView({
                             : "No release selected"}
                         </span>
                       </div>
+                      {missing > 0 && (
+                        <span
+                          className="chip missing-chip"
+                          title={`${missing} track${missing === 1 ? "" : "s"} on the selected release have no local file`}
+                        >
+                          {missing} missing
+                        </span>
+                      )}
                       <span className="chip status-automatched">
                         {album.status === "auto-matched" ? "Auto" : "Confirmed"}
                       </span>
