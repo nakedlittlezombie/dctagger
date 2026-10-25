@@ -2,12 +2,7 @@ name: dctagger
 
 services:
   dctagger:
-    build:
-      context: .
-      args:
-        NODE_DEV_IMAGE: ${NODE_DEV_IMAGE:-dhi.io/node:24-alpine3.24-dev}
-        NODE_RUNTIME_IMAGE: ${NODE_RUNTIME_IMAGE:-dhi.io/node:24-alpine3.24}
-    image: nakedzombie/dctagger
+    image: nakedzombie/dctagger:latest
     container_name: dctagger
     restart: unless-stopped
     init: true

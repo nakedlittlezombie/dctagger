@@ -129,18 +129,12 @@ track:  {track:02} - {title}
 
 ## Docker
 
-The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-images/catalog/dhi/node):
+Two compose files are provided:
 
-- build: `dhi.io/node:24-alpine3.24-dev`
-- runtime: `dhi.io/node:24-alpine3.24` — non-root, no shell
+- `docker-compose.yml` — runs the published image `nakedzombie/dctagger:latest`
+- `docker-compose.dev.yml` — builds the image locally from the Docker Hardened Images base
 
-Authenticate to the DHI registry first:
-
-```sh
-docker login dhi.io
-```
-
-Then:
+### Run the published image
 
 ```sh
 cp example.env .env
@@ -149,10 +143,33 @@ cp example.env .env
 mkdir -p config cache music output
 sudo chown -R "$(id -u):$(id -g)" config cache music output
 
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 Open <http://127.0.0.1:4780> by default.
+
+### Build the image locally
+
+The build uses Docker Hardened Images from the
+[DHI catalog](https://hub.docker.com/hardened-images/catalog/dhi/node):
+
+- build: `dhi.io/node:24-alpine3.24-dev`
+- runtime: `dhi.io/node:24-alpine3.24` — non-root, no shell
+
+Authenticate to the DHI registry first, then build and push:
+
+```sh
+docker login dhi.io
+docker compose -f docker-compose.dev.yml build
+docker push nakedzombie/dctagger:latest
+```
+
+Or start the locally built version directly:
+
+```sh
+docker compose -f docker-compose.dev.yml up -d
+```
 
 The service runs with a read-only root filesystem, all capabilities dropped,
 `no-new-privileges`, and a `/tmp` tmpfs. Only these mounts are writable:
@@ -178,8 +195,8 @@ The cache can be cleared independently of settings and review decisions.
 | `DCTAGGER_OUTPUT_DIR` | `./output` | Destination mount |
 | `PUID` / `PGID` | `1000` / `1000` | Container user; must own the host directories |
 | `TZ` | `Etc/UTC` | Container timezone |
-| `NODE_DEV_IMAGE` | DHI Node dev tag | Optional mirror override |
-| `NODE_RUNTIME_IMAGE` | DHI Node runtime tag | Optional mirror override |
+| `NODE_DEV_IMAGE` | DHI Node dev tag | Optional mirror override (build only) |
+| `NODE_RUNTIME_IMAGE` | DHI Node runtime tag | Optional mirror override (build only) |
 
 ## Environment variables (non-Docker)
 

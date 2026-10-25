@@ -15,6 +15,6 @@ npm test                 # vitest
 npm run check            # typecheck + boundaries + tests
 ```
 
-Docker: copy `example.env` to `.env`, adjust mounts (`config`, `cache`, `music`, `output`) and PUID/PGID, then `docker compose up -d --build`. The image uses Docker Hardened Images (`dhi.io/node`), so run `docker login dhi.io` first.
+Docker: copy `example.env` to `.env`, adjust mounts (`config`, `cache`, `music`, `output`) and PUID/PGID. `docker compose up -d` runs the published `nakedzombie/dctagger:latest`; `docker compose -f docker-compose.dev.yml up -d --build` builds locally with Docker Hardened Images (`dhi.io/node`, requires `docker login dhi.io`).
 
 Packages are deep modules: see [src/packages/README.md](./src/packages/README.md) before adding or importing one.

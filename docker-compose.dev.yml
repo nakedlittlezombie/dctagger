@@ -1,0 +1,61 @@
+name: dctagger
+
+services:
+  dctagger:
+    build:
+      context: .
+      args:
+        NODE_DEV_IMAGE: ${NODE_DEV_IMAGE:-dhi.io/node:24-alpine3.24-dev}
+        NODE_RUNTIME_IMAGE: ${NODE_RUNTIME_IMAGE:-dhi.io/node:24-alpine3.24}
+    image: nakedzombie/dctagger:latest
+    container_name: dctagger
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+
+    ports:
+      - "${DCTAGGER_BIND:-127.0.0.1}:${DCTAGGER_PORT:-4780}:4780"
+
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "4780"
+      HOME: /data
+      DCTAGGER_DATA_DIR: /data
+      DCTAGGER_ROOT_FOLDER: /music
+      DCTAGGER_DESTINATION_FOLDER: /output
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      TZ: "${TZ:-Etc/UTC}"
+
+    volumes:
+      # Settings, session (persistent, small).
+      - "${DCTAGGER_CONFIG_DIR:-./config}:/data"
+      # Discogs API/image cache and embedded-art previews.
+      - "${DCTAGGER_CACHE_DIR:-./cache}:/data/cache"
+      # Music library to scan. Writable so move/delete modes can work.
+      - "${DCTAGGER_MUSIC_DIR:-./music}:/music"
+      # Tagged output. Must be writable by PUID:PGID.
+      - "${DCTAGGER_OUTPUT_DIR:-./output}:/output"
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4780/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
