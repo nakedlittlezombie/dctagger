@@ -1,5 +1,4 @@
-#<img alt="DCTagger" src="dist/web/dctagger.png" height="24" />
-
+<h1> <img alt="DCTagger" src="dist/web/dctagger.png" height=42" />  DCTagger</h1>
 
 **A local, self-hosted Discogs music tagger with a review workspace, duplicate cleanup,
 cover-art handling, and a batch tagging pipeline.**
