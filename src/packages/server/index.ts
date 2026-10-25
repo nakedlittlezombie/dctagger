@@ -20,8 +20,10 @@ interface ScanBody {
 }
 
 interface LookupBody {
-  query?: string;
-  source?: "discogs" | "deezer";
+  source?: "discogs" | "deezer" | "link";
+  artist?: string;
+  album?: string;
+  url?: string;
 }
 
 interface ConfirmBody {
@@ -105,11 +107,14 @@ export async function buildServer(options: ServerOptions = {}): Promise<{
     "/api/albums/:id/lookup",
     async (request) => {
       const body = bodyOf<LookupBody>(request);
-      return state.lookup(
-        request.params.id,
-        body.query,
-        body.source === "deezer" ? "deezer" : "discogs",
-      );
+      const source =
+        body.source === "deezer" || body.source === "link" ? body.source : "discogs";
+      return state.lookup(request.params.id, {
+        source,
+        artist: body.artist,
+        album: body.album,
+        url: body.url,
+      });
     },
   );
 

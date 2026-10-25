@@ -153,6 +153,18 @@ export class DiscogsClient {
     return mapRelease(raw, fallbackCover);
   }
 
+  /** Resolve a Discogs master URL/ID to its main release ID. */
+  async getMasterMainRelease(masterId: number): Promise<number> {
+    const raw = await this.request<{ id?: number; main_release?: number }>(
+      `/masters/${masterId}`,
+      {},
+    );
+    if (typeof raw.main_release !== "number" || raw.main_release <= 0) {
+      throw new DiscogsError("Discogs master has no main release", 404);
+    }
+    return raw.main_release;
+  }
+
   async getIdentity(): Promise<{ id: number; username: string; resourceUrl: string }> {
     const raw = await this.request<{ id: number; username: string; resource_url?: string }>(
       "/oauth/identity",

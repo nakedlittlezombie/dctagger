@@ -23,7 +23,7 @@ export in [`stitch_export/`](stitch_export/).
   - a separate **Top Deezer matches** block, populated automatically
   - full release tracklist
   - folder and embedded artwork inspection
-  - manual Discogs **or Deezer** lookup
+  - manual lookup with separate **artist**, **album**, and **release link** fields
   - per-file → track mapping with confidence suggestions
   - metadata preview, including the effective genre and its source
 - Duplicate detection per folder with automatic quality ranking
@@ -108,11 +108,13 @@ are best-effort enrichments: failures are ignored, responses are cached for 30 d
 audio is downloaded** from either service.
 
 Deezer is also available as a **manual lookup source** and the review screen automatically
-loads a separate **Top Deezer matches** block under the Discogs candidates. When Discogs has no
-suitable release, the review screen can use Deezer album metadata and tracklist for the match,
-cover art, and tags. Deezer-sourced matches are marked `dz…` in the UI and write a Deezer
-release reference into the tag comment. Selecting a Deezer candidate uses the same mapping and
-apply pipeline as a Discogs release.
+loads a separate **Top Deezer matches** block under the Discogs candidates. Manual lookup has
+separate artist and album fields plus a release-link field: paste a Discogs release/master URL
+or a Deezer album URL to force that match. When Discogs has no suitable release, the review
+screen can use Deezer album metadata and tracklist for the match, cover art, and tags.
+Deezer-sourced matches are marked `dz…` in the UI and write a Deezer release reference into
+the tag comment. Selecting a Deezer candidate uses the same mapping and apply pipeline as a
+Discogs release.
 
 The metadata preview shows the effective genre and its source (`Discogs`, `Deezer`,
 `MusicBrainz`, or `Local tags`). The same value is written to the file tags.

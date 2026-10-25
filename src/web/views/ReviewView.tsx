@@ -84,7 +84,9 @@ export function ReviewView({
     mappingFromAlbum(album),
   );
   const [coverOverride, setCoverOverride] = useState<string | null>(album.coverOverride ?? null);
-  const [query, setQuery] = useState("");
+  const [artistQuery, setArtistQuery] = useState("");
+  const [albumQuery, setAlbumQuery] = useState("");
+  const [linkQuery, setLinkQuery] = useState("");
   const [working, setWorking] = useState(false);
   const [dedupeWorking, setDedupeWorking] = useState<string | null>(null);
   const [deezerLoading, setDeezerLoading] = useState(false);
@@ -111,7 +113,7 @@ export function ReviewView({
     setDeezerLoading(true);
     setDeezerError(null);
     void api
-      .lookup(album.id, "", "deezer")
+      .lookup(album.id, { source: "deezer" })
       .then((updated) => {
         if (!cancelled) onChanged(updated);
       })
@@ -233,18 +235,19 @@ export function ReviewView({
       deezerRequestedFor.current = null;
     }
     try {
-      const updated = await api.lookup(album.id, query.trim(), source);
+      const updated = await api.lookup(album.id, {
+        source,
+        artist: artistQuery.trim(),
+        album: albumQuery.trim(),
+      });
       onChanged(updated);
-      setQuery("");
+      const count =
+        source === "deezer" ? updated.deezerCandidates.length : updated.candidates.length;
       onNotify(
-        updated.candidates.length > 0 || updated.deezerCandidates.length > 0
-          ? source === "deezer"
-            ? `Found ${updated.deezerCandidates.length} Deezer match${updated.deezerCandidates.length === 1 ? "" : "es"}.`
-            : `Found ${updated.candidates.length} Discogs match${updated.candidates.length === 1 ? "" : "es"}.`
+        count > 0
+          ? `Found ${count} ${source === "deezer" ? "Deezer" : "Discogs"} match${count === 1 ? "" : "es"}.`
           : `No ${source === "deezer" ? "Deezer" : "Discogs"} matches found.`,
-        updated.candidates.length > 0 || updated.deezerCandidates.length > 0
-          ? "success"
-          : "error",
+        count > 0 ? "success" : "error",
       );
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -253,6 +256,42 @@ export function ReviewView({
     } finally {
       setWorking(false);
       if (source === "deezer") setDeezerLoading(false);
+    }
+  };
+
+  const lookupLink = async () => {
+    const url = linkQuery.trim();
+    if (!url) {
+      onNotify("Paste a Discogs or Deezer release link first.", "error");
+      return;
+    }
+    setWorking(true);
+    const isDeezerLink = /deezer\.com/i.test(url);
+    if (isDeezerLink) {
+      setDeezerLoading(true);
+      setDeezerError(null);
+    } else {
+      deezerRequestedFor.current = null;
+    }
+    try {
+      const updated = await api.lookup(album.id, { source: "link", url });
+      onChanged(updated);
+      const selected = [...updated.candidates, ...updated.deezerCandidates].find(
+        (entry) => entry.release.id === updated.selectedReleaseId,
+      );
+      onNotify(
+        selected
+          ? `Linked match loaded: ${selected.release.artists.map((artist) => artist.name).join(", ")} — ${selected.release.title}.`
+          : "Linked match loaded.",
+        "success",
+      );
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (isDeezerLink) setDeezerError(message);
+      onNotify(message, "error");
+    } finally {
+      setWorking(false);
+      if (isDeezerLink) setDeezerLoading(false);
     }
   };
 
@@ -547,35 +586,6 @@ export function ReviewView({
               )}
               {album.candidates.map(renderCandidate)}
             </div>
-
-            <form
-              className="lookup-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void lookup("discogs");
-              }}
-            >
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search Discogs or Deezer…"
-                spellCheck={false}
-              />
-              <button className="button ghost small" type="submit" disabled={working}>
-                Discogs
-              </button>
-              <button
-                className="button ghost small"
-                type="button"
-                disabled={working}
-                onClick={() => void lookup("deezer")}
-              >
-                Deezer
-              </button>
-            </form>
-            <p className="muted tiny">
-              Leave empty to search with the folder's artist and album hints.
-            </p>
           </section>
 
           <section className="panel deezer-panel">
@@ -612,6 +622,70 @@ export function ReviewView({
                 Find Deezer matches
               </button>
             )}
+          </section>
+
+          <section className="panel lookup-panel">
+            <div className="section-heading tight">
+              <div>
+                <div className="eyebrow">Manual lookup</div>
+                <h2>Artist / album / link</h2>
+              </div>
+            </div>
+            <form
+              className="lookup-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void lookup("discogs");
+              }}
+            >
+              <input
+                value={artistQuery}
+                onChange={(event) => setArtistQuery(event.target.value)}
+                placeholder="Artist"
+                spellCheck={false}
+                aria-label="Artist"
+              />
+              <input
+                value={albumQuery}
+                onChange={(event) => setAlbumQuery(event.target.value)}
+                placeholder="Album"
+                spellCheck={false}
+                aria-label="Album"
+              />
+              <input
+                className="lookup-link"
+                value={linkQuery}
+                onChange={(event) => setLinkQuery(event.target.value)}
+                placeholder="Paste a Discogs or Deezer release link"
+                spellCheck={false}
+                aria-label="Release link"
+              />
+              <div className="lookup-actions">
+                <button className="button ghost small" type="submit" disabled={working}>
+                  Search Discogs
+                </button>
+                <button
+                  className="button ghost small"
+                  type="button"
+                  disabled={working}
+                  onClick={() => void lookup("deezer")}
+                >
+                  Search Deezer
+                </button>
+                <button
+                  className="button ghost small"
+                  type="button"
+                  disabled={working}
+                  onClick={() => void lookupLink()}
+                >
+                  Match link
+                </button>
+              </div>
+            </form>
+            <p className="muted tiny">
+              Empty artist/album uses the folder hints. Links may be Discogs release/master URLs
+              or Deezer album URLs.
+            </p>
           </section>
         </aside>
 

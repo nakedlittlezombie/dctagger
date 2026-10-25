@@ -184,6 +184,15 @@ function deezerRelease(
 interface MatchOptions {
   allowAuto: boolean;
   query?: string;
+  artist?: string;
+  album?: string;
+}
+
+export interface LookupRequest {
+  source: "discogs" | "deezer" | "link";
+  artist?: string;
+  album?: string;
+  url?: string;
 }
 
 export class AppState {
@@ -378,25 +387,21 @@ export class AppState {
     return this.session;
   }
 
-  async lookup(
-    albumId: string,
-    query?: string,
-    source: "discogs" | "deezer" = "discogs",
-  ): Promise<AlbumFolder> {
+  async lookup(albumId: string, request: LookupRequest): Promise<AlbumFolder> {
     if (this.applyRunning) throw new AppError(409, "Wait for the apply job to finish");
     const album = this.albumOrThrow(albumId);
-    if (source === "deezer") {
-      await this.matchDeezer(album, query);
+    if (request.source === "link") {
+      await this.matchLink(album, request.url ?? "");
+    } else if (request.source === "deezer") {
+      await this.matchDeezer(album, {
+        artist: request.artist,
+        album: request.album,
+      });
     } else {
-      const trimmed = query?.trim();
-      const fallbackArtist = album.hints.artist;
-      const fallbackAlbum = album.hints.album || album.folderName;
-      const useQuery =
-        trimmed || (!fallbackArtist && !fallbackAlbum ? album.folderName : undefined);
-
       await this.matchAlbum(album, {
         allowAuto: false,
-        query: useQuery || undefined,
+        artist: request.artist,
+        album: request.album,
       });
     }
     this.refreshSummary();
@@ -690,12 +695,20 @@ export class AppState {
 
     const client = this.client();
     const limit = this.store.settings.candidateCount;
-    const hasHints = Boolean(album.hints.artist || album.hints.album);
-    const searchQuery = options.query ?? (hasHints ? undefined : album.folderName);
+    const manualArtist = options.artist?.trim();
+    const manualAlbum = options.album?.trim();
+    const hasManual = Boolean(manualArtist || manualAlbum);
+    const searchArtist = hasManual ? manualArtist : album.hints.artist;
+    const searchAlbum = hasManual ? manualAlbum : album.hints.album;
+    const searchQuery =
+      options.query ??
+      (!hasManual && !searchArtist && !searchAlbum ? album.folderName : undefined);
 
     const summaries = await client.searchReleases({
       ...(searchQuery ? { query: searchQuery } : {}),
-      ...(!searchQuery ? { artist: album.hints.artist, album: album.hints.album } : {}),
+      ...(!searchQuery && (searchArtist || searchAlbum)
+        ? { artist: searchArtist, album: searchAlbum }
+        : {}),
       limit: Math.max(limit * 2, 8),
     });
 
@@ -782,7 +795,126 @@ export class AppState {
    * and only become the selected release when there are no Discogs matches or
    * the user explicitly selects one.
    */
-  private async matchDeezer(album: AlbumFolder, query?: string): Promise<void> {
+  private async matchLink(album: AlbumFolder, rawUrl: string): Promise<void> {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) throw new AppError(400, "Paste a Discogs or Deezer release link");
+    const urlText = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(urlText);
+    } catch {
+      throw new AppError(400, "That is not a valid link");
+    }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new AppError(400, "Use an http(s) Discogs or Deezer link");
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    const isDiscogs = host === "discogs.com" || host.endsWith(".discogs.com");
+    const isDeezer = host === "deezer.com" || host.endsWith(".deezer.com");
+    if (isDiscogs) {
+      await this.matchDiscogsLink(album, parsed);
+    } else if (isDeezer) {
+      await this.matchDeezerLink(album, parsed);
+    } else {
+      throw new AppError(400, "Paste a Discogs or Deezer link");
+    }
+  }
+
+  private async matchDiscogsLink(album: AlbumFolder, parsed: URL): Promise<void> {
+    const releaseMatch = /\/(?:release|releases)\/(\d+)/i.exec(parsed.pathname);
+    const masterMatch = /\/(?:master|masters)\/(\d+)/i.exec(parsed.pathname);
+    if (!releaseMatch?.[1] && !masterMatch?.[1]) {
+      throw new AppError(400, "Use a Discogs release or master link");
+    }
+
+    const client = this.client();
+    const releaseId = releaseMatch?.[1]
+      ? Number.parseInt(releaseMatch[1], 10)
+      : await client.getMasterMainRelease(Number.parseInt(masterMatch?.[1] ?? "0", 10));
+    const release = await client.getRelease(releaseId);
+    const unique = uniqueTracks(album.tracks, album.duplicates);
+    const local = {
+      artist: album.hints.artist,
+      album: album.hints.album,
+      year: album.hints.year,
+      tracks: unique.map((track) => ({
+        title: track.title,
+        fileName: track.fileName,
+        track: track.track,
+        duration: track.duration,
+      })),
+    };
+    const candidate = rankReleases(local, [release])[0];
+    if (!candidate) throw new AppError(502, "Could not evaluate the linked Discogs release");
+
+    album.candidates = [{
+      release,
+      score: candidate.score,
+      breakdown: candidate.breakdown,
+    }];
+    album.deezerCandidates = [];
+    album.deezerCandidatesLoaded = false;
+    album.selectedReleaseId = release.id;
+    album.confidence = candidate.score;
+    album.mapping = this.mappingFor(album, release);
+    album.status = "needs-review";
+    album.autoMatched = false;
+    album.error = undefined;
+    album.updatedAt = new Date().toISOString();
+    await this.enrichGenreFallback(album, release);
+  }
+
+  private async matchDeezerLink(album: AlbumFolder, parsed: URL): Promise<void> {
+    const albumMatch = /\/album\/(\d+)/i.exec(parsed.pathname);
+    if (!albumMatch?.[1]) {
+      throw new AppError(400, "Use a Deezer album link");
+    }
+    const deezerId = Number.parseInt(albumMatch[1], 10);
+    const info = await this.deezerClient().getAlbum(deezerId);
+    const tracks = await this.deezerClient().getAlbumTracks(deezerId);
+    if (tracks.length === 0) throw new AppError(404, "That Deezer album has no tracks");
+    const release = deezerRelease(info, tracks);
+
+    const unique = uniqueTracks(album.tracks, album.duplicates);
+    const local = {
+      artist: album.hints.artist,
+      album: album.hints.album,
+      year: album.hints.year,
+      tracks: unique.map((track) => ({
+        title: track.title,
+        fileName: track.fileName,
+        track: track.track,
+        duration: track.duration,
+      })),
+    };
+    const candidate = rankReleases(local, [release])[0];
+    if (!candidate) throw new AppError(502, "Could not evaluate the linked Deezer album");
+
+    const match: MatchCandidate = {
+      release,
+      score: candidate.score,
+      breakdown: candidate.breakdown,
+    };
+    album.deezerCandidates = [match];
+    album.deezerCandidatesLoaded = true;
+    album.selectedReleaseId = release.id;
+    album.confidence = candidate.score;
+    album.mapping = this.mappingFor(album, release);
+    album.status = "needs-review";
+    album.autoMatched = false;
+    album.error = undefined;
+    album.updatedAt = new Date().toISOString();
+    await this.enrichGenreFallback(album, release);
+  }
+
+  private async matchDeezer(
+    album: AlbumFolder,
+    options: { artist?: string; album?: string } = {},
+  ): Promise<void> {
     const unique = uniqueTracks(album.tracks, album.duplicates);
     if (unique.length === 0) {
       album.status = "needs-review";
@@ -791,9 +923,14 @@ export class AppState {
       return;
     }
 
-    const trimmed = query?.trim();
-    const artist = trimmed ? undefined : album.hints.artist;
-    const albumQuery = trimmed || album.hints.album || album.folderName;
+    const manualArtist = options.artist?.trim();
+    const manualAlbum = options.album?.trim();
+    const hasManual = Boolean(manualArtist || manualAlbum);
+    const artist = hasManual ? manualArtist : album.hints.artist;
+    const albumQuery = hasManual
+      ? manualAlbum ?? ""
+      : album.hints.album || album.folderName;
+    const searchText = [manualArtist, manualAlbum].filter(Boolean).join(" ").trim();
     const summaries = await this.deezerClient().searchAlbums(artist, albumQuery, 6);
     const hasDiscogs = album.candidates.length > 0;
 
@@ -866,13 +1003,13 @@ export class AppState {
         score: entry.score,
         breakdown: entry.breakdown,
       }));
-    const ordered = trimmed
+    const ordered = hasManual
       ? releases
           .map((release) => {
             const rankedEntry = ranked.find((entry) => entry.release.id === release.id);
             if (!rankedEntry) return undefined;
             const artistName = release.artists[0]?.name ?? "";
-            const queryScore = similarity(trimmed, `${artistName} ${release.title}`);
+            const queryScore = similarity(searchText, `${artistName} ${release.title}`);
             return { ...rankedEntry, score: Math.round(queryScore * 10000) / 10000 };
           })
           .filter((entry): entry is MatchCandidate => Boolean(entry))
