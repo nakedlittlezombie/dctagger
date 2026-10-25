@@ -1900,6 +1900,17 @@ p {
   gap: 5px;
 }
 
+.deezer-panel .candidate-list {
+  margin-top: 4px;
+}
+
+.deezer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .candidate-card {
   display: flex;
   align-items: flex-start;

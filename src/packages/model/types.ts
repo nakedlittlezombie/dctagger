@@ -195,6 +195,9 @@ export interface AlbumFolder {
   hints: AlbumHints;
   status: AlbumStatus;
   candidates: MatchCandidate[];
+  /** Deezer results shown alongside the Discogs candidates. */
+  deezerCandidates: MatchCandidate[];
+  deezerCandidatesLoaded: boolean;
   selectedReleaseId?: number;
   mapping: TrackAssignment[];
   /** Groups of files that represent the same track in this folder. */

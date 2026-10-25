@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { autoMap } from "../../packages/matching";
 import type {
@@ -21,8 +21,9 @@ function autoMappingFor(
   album: AlbumFolder,
   releaseId: number | undefined,
 ): Record<string, number | null> {
-  const candidate = album.candidates.find((entry) => entry.release.id === releaseId) ??
-    album.candidates[0];
+  const candidate = [...album.candidates, ...album.deezerCandidates].find(
+    (entry) => entry.release.id === releaseId,
+  ) ?? album.candidates[0] ?? album.deezerCandidates[0];
   const losers = new Set(
     album.duplicates.flatMap((group) =>
       group.members.filter((member) => member.path !== group.keep).map((member) => member.path),
@@ -76,7 +77,8 @@ export function ReviewView({
   onNotify,
 }: ReviewViewProps) {
   const [selectedId, setSelectedId] = useState<number | undefined>(
-    album.selectedReleaseId ?? album.candidates[0]?.release.id,
+    album.selectedReleaseId ?? album.candidates[0]?.release.id ??
+      album.deezerCandidates[0]?.release.id,
   );
   const [mapping, setMapping] = useState<Record<string, number | null>>(() =>
     mappingFromAlbum(album),
@@ -85,16 +87,50 @@ export function ReviewView({
   const [query, setQuery] = useState("");
   const [working, setWorking] = useState(false);
   const [dedupeWorking, setDedupeWorking] = useState<string | null>(null);
+  const [deezerLoading, setDeezerLoading] = useState(false);
+  const [deezerError, setDeezerError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; caption?: string } | null>(null);
+  const deezerRequestedFor = useRef<string | null>(null);
 
   useEffect(() => {
-    setSelectedId(album.selectedReleaseId ?? album.candidates[0]?.release.id);
+    setSelectedId(
+      album.selectedReleaseId ?? album.candidates[0]?.release.id ??
+        album.deezerCandidates[0]?.release.id,
+    );
     setMapping(mappingFromAlbum(album));
     setCoverOverride(album.coverOverride ?? null);
   }, [album.id, album.updatedAt, album.selectedReleaseId]);
 
-  const selected = album.candidates.find((entry) => entry.release.id === selectedId) ??
-    album.candidates[0];
+  // Populate the Deezer block once per album. The server persists it, so this
+  // is cached across reloads and never repeats for an already-loaded album.
+  useEffect(() => {
+    if (album.deezerCandidatesLoaded) return;
+    if (deezerRequestedFor.current === album.id) return;
+    deezerRequestedFor.current = album.id;
+    let cancelled = false;
+    setDeezerLoading(true);
+    setDeezerError(null);
+    void api
+      .lookup(album.id, "", "deezer")
+      .then((updated) => {
+        if (!cancelled) onChanged(updated);
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setDeezerError(cause instanceof Error ? cause.message : String(cause));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDeezerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [album.id, album.deezerCandidatesLoaded, onChanged]);
+
+  const selected = [...album.candidates, ...album.deezerCandidates].find(
+    (entry) => entry.release.id === selectedId,
+  ) ?? album.candidates[0] ?? album.deezerCandidates[0];
   const release = selected?.release;
   const losers = useMemo(
     () =>
@@ -130,6 +166,48 @@ export function ReviewView({
     setMapping(autoMappingFor(album, candidate.release.id));
   };
 
+  const renderCandidate = (candidate: MatchCandidate) => {
+    const pinned = candidate.release.id === selected?.release.id;
+    const thumb = candidate.release.coverImage ?? candidate.release.thumb;
+    const scoreClass =
+      candidate.score >= 0.9 ? "high" : candidate.score >= 0.6 ? "medium" : "low";
+    return (
+      <button
+        key={candidate.release.id}
+        className={pinned ? "candidate-card active" : "candidate-card"}
+        onClick={() => applyCandidate(candidate)}
+      >
+        <div className="candidate-thumb">
+          {thumb ? <img src={imageUrl(thumb)} alt="" loading="lazy" /> : <span>♪</span>}
+        </div>
+        <div className="candidate-copy">
+          <span className="candidate-title" title={candidate.release.title}>
+            {candidate.release.title}
+          </span>
+          <span className="candidate-artist">
+            {candidate.release.artists.map((artist) => artist.name).join(", ")}
+            {candidate.release.year ? ` · ${candidate.release.year}` : ""}
+          </span>
+          <span className="candidate-format">
+            {candidate.release.formats.map((format) => format.name).join(" ")}
+            {candidate.release.tracklist.length > 0
+              ? ` · ${candidate.release.tracklist.length} tracks`
+              : ""}
+            {` · ${candidate.release.source === "deezer" ? "dz" : "r"}${Math.abs(candidate.release.id)}`}
+          </span>
+        </div>
+        <span
+          className={`score-badge ${scoreClass}`}
+          title={Object.entries(candidate.breakdown)
+            .map(([key, value]) => `${key} ${Math.round(value * 100)}%`)
+            .join(" · ")}
+        >
+          {Math.round(candidate.score * 100)}%
+        </span>
+      </button>
+    );
+  };
+
   const setFileTrack = (filePath: string, value: number | null) => {
     setMapping((current) => {
       const next = { ...current, [filePath]: value };
@@ -148,20 +226,33 @@ export function ReviewView({
 
   const lookup = async (source: "discogs" | "deezer" = "discogs") => {
     setWorking(true);
+    if (source === "deezer") {
+      setDeezerLoading(true);
+      setDeezerError(null);
+    } else {
+      deezerRequestedFor.current = null;
+    }
     try {
       const updated = await api.lookup(album.id, query.trim(), source);
       onChanged(updated);
       setQuery("");
       onNotify(
-        updated.candidates.length > 0
-          ? `Found ${updated.candidates.length} ${source === "deezer" ? "Deezer" : "Discogs"} match${updated.candidates.length === 1 ? "" : "es"}.`
+        updated.candidates.length > 0 || updated.deezerCandidates.length > 0
+          ? source === "deezer"
+            ? `Found ${updated.deezerCandidates.length} Deezer match${updated.deezerCandidates.length === 1 ? "" : "es"}.`
+            : `Found ${updated.candidates.length} Discogs match${updated.candidates.length === 1 ? "" : "es"}.`
           : `No ${source === "deezer" ? "Deezer" : "Discogs"} matches found.`,
-        updated.candidates.length > 0 ? "success" : "error",
+        updated.candidates.length > 0 || updated.deezerCandidates.length > 0
+          ? "success"
+          : "error",
       );
     } catch (cause) {
-      onNotify(cause instanceof Error ? cause.message : String(cause), "error");
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (source === "deezer") setDeezerError(message);
+      onNotify(message, "error");
     } finally {
       setWorking(false);
+      if (source === "deezer") setDeezerLoading(false);
     }
   };
 
@@ -301,7 +392,7 @@ export function ReviewView({
           : album.hints.genres?.length
             ? "Local tags"
             : "None";
-  const confidenceValue = album.confidence ?? selected?.score ?? 0;
+  const confidenceValue = selected?.score ?? album.confidence ?? 0;
   const confidenceClass =
     confidenceValue >= 0.9 ? "high" : confidenceValue >= 0.6 ? "medium" : "low";
 
@@ -443,9 +534,7 @@ export function ReviewView({
           <section className="panel candidates-panel">
             <div className="section-heading tight">
               <div>
-                <div className="eyebrow">
-                  {selected?.release.source === "deezer" ? "Deezer candidates" : "Discogs candidates"}
-                </div>
+                <div className="eyebrow">Discogs candidates</div>
                 <h2>Top matches</h2>
               </div>
               <span className="chip">{album.candidates.length} found</span>
@@ -453,50 +542,10 @@ export function ReviewView({
             <div className="candidate-list">
               {album.candidates.length === 0 && (
                 <p className="muted small">
-                  No matches yet. Search Discogs or Deezer below.
+                  No Discogs matches yet. Deezer matches appear below.
                 </p>
               )}
-              {album.candidates.map((candidate) => {
-                const pinned = candidate.release.id === selected?.release.id;
-                const thumb = candidate.release.coverImage ?? candidate.release.thumb;
-                const scoreClass =
-                  candidate.score >= 0.9 ? "high" : candidate.score >= 0.6 ? "medium" : "low";
-                return (
-                  <button
-                    key={candidate.release.id}
-                    className={pinned ? "candidate-card active" : "candidate-card"}
-                    onClick={() => applyCandidate(candidate)}
-                  >
-                    <div className="candidate-thumb">
-                      {thumb ? <img src={imageUrl(thumb)} alt="" loading="lazy" /> : <span>♪</span>}
-                    </div>
-                    <div className="candidate-copy">
-                      <span className="candidate-title" title={candidate.release.title}>
-                        {candidate.release.title}
-                      </span>
-                      <span className="candidate-artist">
-                        {candidate.release.artists.map((artist) => artist.name).join(", ")}
-                        {candidate.release.year ? ` · ${candidate.release.year}` : ""}
-                      </span>
-                      <span className="candidate-format">
-                        {candidate.release.formats.map((format) => format.name).join(" ")}
-                        {candidate.release.tracklist.length > 0
-                          ? ` · ${candidate.release.tracklist.length} tracks`
-                          : ""}
-                        {` · ${candidate.release.source === "deezer" ? "dz" : "r"}${Math.abs(candidate.release.id)}`}
-                      </span>
-                    </div>
-                    <span
-                      className={`score-badge ${scoreClass}`}
-                      title={Object.entries(candidate.breakdown)
-                        .map(([key, value]) => `${key} ${Math.round(value * 100)}%`)
-                        .join(" · ")}
-                    >
-                      {Math.round(candidate.score * 100)}%
-                    </span>
-                  </button>
-                );
-              })}
+              {album.candidates.map(renderCandidate)}
             </div>
 
             <form
@@ -527,6 +576,42 @@ export function ReviewView({
             <p className="muted tiny">
               Leave empty to search with the folder's artist and album hints.
             </p>
+          </section>
+
+          <section className="panel deezer-panel">
+            <div className="section-heading tight">
+              <div>
+                <div className="eyebrow">Deezer</div>
+                <h2>Top Deezer matches</h2>
+              </div>
+              <span className="chip">{album.deezerCandidates.length}</span>
+            </div>
+            {deezerLoading && <p className="muted small">Searching Deezer…</p>}
+            {!deezerLoading && deezerError && (
+              <div className="deezer-empty">
+                <p className="form-error">{deezerError}</p>
+                <button className="button ghost small" onClick={() => void lookup("deezer")}>
+                  Retry Deezer
+                </button>
+              </div>
+            )}
+            {!deezerLoading && !deezerError && album.deezerCandidates.length === 0 && (
+              <p className="muted small">
+                {album.deezerCandidatesLoaded
+                  ? "No Deezer matches found."
+                  : "Deezer matches have not been loaded yet."}
+              </p>
+            )}
+            {!deezerLoading && album.deezerCandidates.length > 0 && (
+              <div className="candidate-list">
+                {album.deezerCandidates.map(renderCandidate)}
+              </div>
+            )}
+            {!deezerLoading && !album.deezerCandidatesLoaded && !deezerError && (
+              <button className="button ghost small" onClick={() => void lookup("deezer")}>
+                Find Deezer matches
+              </button>
+            )}
           </section>
         </aside>
 

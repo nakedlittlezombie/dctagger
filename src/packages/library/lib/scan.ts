@@ -408,6 +408,8 @@ export async function scanAlbumFolder(
     hints,
     status: audioNames.length > 0 ? "scanning" : "error",
     candidates: [],
+    deezerCandidates: [],
+    deezerCandidatesLoaded: false,
     mapping: [],
     duplicates,
     autoMatched: false,

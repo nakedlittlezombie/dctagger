@@ -20,6 +20,7 @@ export in [`stitch_export/`](stitch_export/).
 - Auto-match threshold and runner-up margin, both configurable.
 - One-album-at-a-time review with:
   - top Discogs candidates and cover previews
+  - a separate **Top Deezer matches** block, populated automatically
   - full release tracklist
   - folder and embedded artwork inspection
   - manual Discogs **or Deezer** lookup
@@ -106,10 +107,12 @@ MusicBrainz is only queried automatically when both Discogs and Deezer return no
 are best-effort enrichments: failures are ignored, responses are cached for 30 days, and **no
 audio is downloaded** from either service.
 
-Deezer is also available as a **manual lookup source**. When Discogs has no suitable release,
-the review screen can search Deezer and use its album metadata and tracklist for the match,
+Deezer is also available as a **manual lookup source** and the review screen automatically
+loads a separate **Top Deezer matches** block under the Discogs candidates. When Discogs has no
+suitable release, the review screen can use Deezer album metadata and tracklist for the match,
 cover art, and tags. Deezer-sourced matches are marked `dz…` in the UI and write a Deezer
-release reference into the tag comment.
+release reference into the tag comment. Selecting a Deezer candidate uses the same mapping and
+apply pipeline as a Discogs release.
 
 The metadata preview shows the effective genre and its source (`Discogs`, `Deezer`,
 `MusicBrainz`, or `Local tags`). The same value is written to the file tags.

@@ -117,6 +117,8 @@ function emptyAlbum(folderPath: string, error: string): AlbumFolder {
     hints: { source: "folder" },
     status: "error",
     candidates: [],
+    deezerCandidates: [],
+    deezerCandidatesLoaded: false,
     mapping: [],
     duplicates: [],
     autoMatched: false,
@@ -414,7 +416,7 @@ export class AppState {
     const album = this.albumOrThrow(albumId);
     if (album.status === "applied") throw new AppError(409, "This album has already been applied");
 
-    const candidate = album.candidates.find(
+    const candidate = [...album.candidates, ...album.deezerCandidates].find(
       (entry) => entry.release.id === Number(input.releaseId),
     );
     if (!candidate) throw new AppError(400, "Choose one of the available matches");
@@ -524,7 +526,7 @@ export class AppState {
     }
 
     album.duplicates = chooseKeeper(album.duplicates, key, keepPath);
-    const selected = album.candidates.find(
+    const selected = [...album.candidates, ...album.deezerCandidates].find(
       (entry) => entry.release.id === album.selectedReleaseId,
     );
     if (selected) {
@@ -676,6 +678,8 @@ export class AppState {
   }
 
   private async matchAlbum(album: AlbumFolder, options: MatchOptions): Promise<void> {
+    album.deezerCandidates = [];
+    album.deezerCandidatesLoaded = false;
     const unique = uniqueTracks(album.tracks, album.duplicates);
     if (unique.length === 0) {
       album.status = "needs-review";
@@ -774,9 +778,9 @@ export class AppState {
   }
 
   /**
-   * Manual fallback lookup through Deezer. Unlike the genre fallback this is
-   * user-triggered and builds full candidates (album, cover, tracklist) so the
-   * normal review/tag/apply pipeline can be used with Deezer metadata.
+   * Load Deezer candidates. They are displayed alongside Discogs candidates
+   * and only become the selected release when there are no Discogs matches or
+   * the user explicitly selects one.
    */
   private async matchDeezer(album: AlbumFolder, query?: string): Promise<void> {
     const unique = uniqueTracks(album.tracks, album.duplicates);
@@ -791,20 +795,24 @@ export class AppState {
     const artist = trimmed ? undefined : album.hints.artist;
     const albumQuery = trimmed || album.hints.album || album.folderName;
     const summaries = await this.deezerClient().searchAlbums(artist, albumQuery, 6);
+    const hasDiscogs = album.candidates.length > 0;
 
     if (summaries.length === 0) {
-      album.candidates = [];
-      album.selectedReleaseId = undefined;
-      album.mapping = album.tracks.map((track) => ({
-        filePath: track.path,
-        trackIndex: null,
-      }));
-      album.status = "needs-review";
-      album.autoMatched = false;
-      album.confidence = undefined;
-      album.error = "No Deezer matches found. Try a manual Discogs lookup.";
-      album.updatedAt = new Date().toISOString();
-      return;
+      album.deezerCandidates = [];
+      album.deezerCandidatesLoaded = true;
+      if (!hasDiscogs) {
+        album.selectedReleaseId = undefined;
+        album.mapping = album.tracks.map((track) => ({
+          filePath: track.path,
+          trackIndex: null,
+        }));
+        album.status = "needs-review";
+        album.autoMatched = false;
+        album.confidence = undefined;
+        album.error =
+          "No Discogs or Deezer matches found. Try a manual lookup with a different query.";
+        album.updatedAt = new Date().toISOString();
+      }      return;
     }
 
     const releases: DiscogsRelease[] = [];
@@ -819,8 +827,24 @@ export class AppState {
         failures.push(`${summary.title}: ${messageOf(error)}`);
       }
     }
+
     if (releases.length === 0) {
-      throw new AppError(502, failures[0] ?? "Could not load Deezer albums");
+      album.deezerCandidates = [];
+      album.deezerCandidatesLoaded = true;
+      if (!hasDiscogs) {
+        album.selectedReleaseId = undefined;
+        album.mapping = album.tracks.map((track) => ({
+          filePath: track.path,
+          trackIndex: null,
+        }));
+        album.status = "needs-review";
+        album.autoMatched = false;
+        album.confidence = undefined;
+        album.error =
+          failures[0] ?? "No Discogs or Deezer matches found. Try a different query.";
+        album.updatedAt = new Date().toISOString();
+      }
+      return;
     }
 
     const local = {
@@ -842,9 +866,6 @@ export class AppState {
         score: entry.score,
         breakdown: entry.breakdown,
       }));
-    // A user-entered query is an explicit search: keep Deezer's relevance
-    // order and score against the query text. Empty-query lookups are
-    // hint-based, so rank against the folder.
     const ordered = trimmed
       ? releases
           .map((release) => {
@@ -856,27 +877,33 @@ export class AppState {
           })
           .filter((entry): entry is MatchCandidate => Boolean(entry))
       : ranked;
-    const top = ordered[0];
-    if (!top) {
-      album.status = "needs-review";
-      album.error = "No Deezer matches found";
-      return;
-    }
 
-    album.candidates = ordered;
-    album.selectedReleaseId = top.release.id;
-    album.confidence = top.score;
-    album.mapping = this.mappingFor(album, top.release);
-    album.deezer = undefined;
-    album.musicbrainz = undefined;
-    await this.enrichGenreFallback(album, top.release);
-    album.status = "needs-review";
-    album.autoMatched = false;
-    album.error =
-      failures.length > 0
-        ? `Some Deezer matches failed to load: ${failures[0]}`
-        : undefined;
-    album.updatedAt = new Date().toISOString();
+    album.deezerCandidates = ordered;
+    album.deezerCandidatesLoaded = true;
+
+    const selectedStillExists =
+      album.selectedReleaseId !== undefined &&
+      (album.candidates.some((entry) => entry.release.id === album.selectedReleaseId) ||
+        ordered.some((entry) => entry.release.id === album.selectedReleaseId));
+
+    if (!hasDiscogs || !selectedStillExists) {
+      const top = ordered[0] ?? album.candidates[0];
+      if (top) {
+        album.selectedReleaseId = top.release.id;
+        album.confidence = top.score;
+        album.mapping = this.mappingFor(album, top.release);
+        await this.enrichGenreFallback(album, top.release);
+      }
+      album.status = "needs-review";
+      album.autoMatched = false;
+      album.error =
+        failures.length > 0
+          ? `Some Deezer matches failed to load: ${failures[0]}`
+          : hasDiscogs
+            ? album.error
+            : undefined;
+      album.updatedAt = new Date().toISOString();
+    }
   }
 
   private mappingFor(album: AlbumFolder, release: DiscogsRelease): TrackAssignment[] {
@@ -973,7 +1000,9 @@ export class AppState {
   private async releaseFor(album: AlbumFolder): Promise<DiscogsRelease> {
     const selected = album.selectedReleaseId;
     if (!selected) throw new AppError(400, "No release selected");
-    const candidate = album.candidates.find((entry) => entry.release.id === selected);
+    const candidate = [...album.candidates, ...album.deezerCandidates].find(
+      (entry) => entry.release.id === selected,
+    );
     if (candidate) return candidate.release;
     return this.client().getRelease(selected);
   }
@@ -1126,6 +1155,23 @@ export class AppState {
           album.status = "needs-review";
           album.error = "Scan was interrupted by a restart";
         }
+
+        // Migrate sessions created before Deezer candidates were kept in a
+        // separate list: any Deezer releases previously stored in candidates
+        // move to deezerCandidates.
+        const legacyDeezer = album.candidates.filter(
+          (entry) => entry.release.source === "deezer",
+        );
+        const existingDeezer = Array.isArray(album.deezerCandidates)
+          ? album.deezerCandidates
+          : [];
+        album.candidates = album.candidates.filter(
+          (entry) => entry.release.source !== "deezer",
+        );
+        album.deezerCandidates =
+          existingDeezer.length > 0 ? existingDeezer : legacyDeezer;
+        album.deezerCandidatesLoaded =
+          Boolean(album.deezerCandidatesLoaded) || album.deezerCandidates.length > 0;
       }
 
       const session: SessionView = { scan, apply, albums };
