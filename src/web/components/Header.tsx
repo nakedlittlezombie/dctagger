@@ -15,22 +15,6 @@ const VIEW_LABELS: Record<View, string> = {
   settings: "API settings",
 };
 
-function DiscIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="logo-mark">
-      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="12" cy="12" r="3.2" fill="currentColor" />
-      <path
-        d="M12 2.4a9.6 9.6 0 0 1 8.4 5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 export function Header({
   view,
   hasToken,
@@ -41,10 +25,9 @@ export function Header({
   return (
     <header className="topbar">
       <button className="brand" onClick={() => onNavigate("library")} aria-label="DCTagger home">
-        <DiscIcon />
+        <img src="dctagger.png" alt="" className="brand-logo" />
         <span className="brand-stack">
           <span className="brand-word">DCTAGGER //</span>
-          <span className="brand-sub">disc tagger workstation</span>
         </span>
       </button>
 
