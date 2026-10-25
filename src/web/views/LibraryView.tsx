@@ -232,12 +232,12 @@ export function LibraryView({
             <div className="panel-actions">
               {reviewable.length > 0 && (
                 <button className="button primary" onClick={onReviewAll}>
-                  Review {reviewable.length} album{reviewable.length === 1 ? "" : "s"} →
+                  {`Review ${reviewable.length} album${reviewable.length === 1 ? "" : "s"} →`}
                 </button>
               )}
               {pendingApply.length > 0 && (
                 <button className="button success" onClick={onApply}>
-                  Apply {pendingApply.length} match{pendingApply.length === 1 ? "" : "es"}
+                  {`Apply ${pendingApply.length} ${pendingApply.length === 1 ? "match" : "matches"}`}
                 </button>
               )}
             </div>

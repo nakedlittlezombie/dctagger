@@ -100,7 +100,7 @@ export function ApplyView({
         </div>
         {!running && pending.length > 0 && (
           <button className="button primary" disabled={busy} onClick={start}>
-            Apply {pending.length} album{pending.length === 1 ? "" : "s"}
+            {`Apply ${pending.length} album${pending.length === 1 ? "" : "s"}`}
           </button>
         )}
       </div>
@@ -261,7 +261,7 @@ export function ApplyView({
             <div>
               <h2>Queued for apply</h2>
               <p className="muted small">
-                {pending.length} confirmed or auto-matched album{pending.length === 1 ? "" : "s"}.
+                {pending.length} confirmed or auto-matched {pending.length === 1 ? "album" : "albums"}.
               </p>
             </div>
           </div>
