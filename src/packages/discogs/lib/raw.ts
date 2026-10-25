@@ -6,6 +6,7 @@ import type {
   ReleaseLabel,
   ReleaseTrack,
 } from "../../model/types";
+import { cleanArtistName } from "../../model/artist";
 
 export interface RawSearchResult {
   id: number;
@@ -81,7 +82,7 @@ const DISC_SIDE_TRACK = /^(\d+)[-.]([A-Za-z])(\d+)$/;
 const NUMBER = /^(\d+)$/;
 
 function cleanArtist(name: string): string {
-  return name.trim().toLowerCase() === "various" ? "Various Artists" : name.trim();
+  return cleanArtistName(name);
 }
 
 function buildTracklist(raw: RawReleaseTrack[] | undefined): ReleaseTrack[] {

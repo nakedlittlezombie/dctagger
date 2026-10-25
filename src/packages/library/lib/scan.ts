@@ -5,6 +5,7 @@ import os from "node:os";
 
 import { parseFile } from "music-metadata";
 
+import { cleanArtistName } from "../../model/artist";
 import { normalizeGenres } from "../../model/genre";
 import type {
   AlbumFolder,
@@ -384,7 +385,8 @@ export async function scanAlbumFolder(
   const folderHints = parseFolderName(folderName);
   const containerArtist = options.artistHint;
 
-  const artist = tagArtist ?? folderHints.artist ?? containerArtist;
+  const rawArtist = tagArtist ?? folderHints.artist ?? containerArtist;
+  const artist = rawArtist ? cleanArtistName(rawArtist) : undefined;
   const album = tagAlbum ?? folderHints.album;
   const year = tagYear ?? folderHints.year;
   const genres = normalizeGenres(tracks.flatMap((track) => track.genres ?? []));

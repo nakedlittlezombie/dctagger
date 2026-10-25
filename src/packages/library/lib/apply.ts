@@ -21,6 +21,7 @@ import type {
   ReleaseTrack,
   TrackAssignment,
 } from "../../model/types";
+import { cleanArtistName } from "../../model/artist";
 import { releaseGenres } from "../../model/genre";
 import { renderFileName, renderFolderPath, type NamingContext } from "../../naming";
 import { detectDuplicates, duplicatePaths } from "./dedupe";
@@ -41,7 +42,9 @@ export interface ApplyAlbumOptions {
 }
 
 function albumArtistFor(release: DiscogsRelease): string {
-  const names = release.artists.map((artist) => artist.name).filter(Boolean);
+  const names = release.artists
+    .map((artist) => cleanArtistName(artist.name))
+    .filter((name) => Boolean(name));
   if (names.length === 0) return "Unknown Artist";
   if (names.length === 1) return names[0] as string;
   const compilation = release.formats.some((format) =>
@@ -51,7 +54,9 @@ function albumArtistFor(release: DiscogsRelease): string {
 }
 
 function releaseArtistFor(release: DiscogsRelease): string {
-  const names = release.artists.map((artist) => artist.name).filter(Boolean);
+  const names = release.artists
+    .map((artist) => cleanArtistName(artist.name))
+    .filter((name) => Boolean(name));
   if (names.length === 0) return "Unknown Artist";
   return names.join(" & ");
 }
@@ -78,7 +83,7 @@ function contextFor(
   sourceFile: string,
 ): NamingContext {
   const albumArtist = albumArtistFor(release);
-  const trackArtist = track?.artists[0] ?? albumArtist;
+  const trackArtist = cleanArtistName(track?.artists[0]) || albumArtist;
   return {
     artist: trackArtist,
     albumartist: albumArtist,
@@ -154,7 +159,7 @@ function writeTags(
   try {
     const tag = tagFile.tag;
     const albumArtist = albumArtistFor(release);
-    const trackArtist = track?.artists[0] ?? albumArtist;
+    const trackArtist = cleanArtistName(track?.artists[0]) || albumArtist;
     const discTracks = release.tracklist.filter(
       (entry) => entry.disc === (track?.disc ?? 1),
     );

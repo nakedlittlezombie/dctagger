@@ -9,6 +9,7 @@ import {
   type DeezerTrackInfo,
 } from "../../deezer";
 import { MusicBrainzClient } from "../../musicbrainz";
+import { cleanArtistName } from "../../model/artist";
 import {
   albumIdFor,
   applyAlbum,
@@ -137,7 +138,7 @@ function deezerRelease(
   info: DeezerAlbumInfo,
   tracks: DeezerTrackInfo[],
 ): DiscogsRelease {
-  const artist = info.artist?.trim() || "Unknown Artist";
+  const artist = cleanArtistName(info.artist) || "Unknown Artist";
   const discCount = Math.max(1, ...tracks.map((track) => track.diskNumber ?? 1));
   const tracklist = tracks.map((track, index) => {
     const disc = track.diskNumber && track.diskNumber > 0 ? track.diskNumber : 1;
@@ -1309,6 +1310,23 @@ export class AppState {
           existingDeezer.length > 0 ? existingDeezer : legacyDeezer;
         album.deezerCandidatesLoaded =
           Boolean(album.deezerCandidatesLoaded) || album.deezerCandidates.length > 0;
+
+        // Clean Discogs disambiguation suffixes in sessions created before
+        // artist-name sanitisation was added.
+        album.hints.artist = album.hints.artist
+          ? cleanArtistName(album.hints.artist)
+          : undefined;
+        for (const candidate of [...album.candidates, ...album.deezerCandidates]) {
+          const release = candidate.release;
+          release.artists = release.artists.map((artist) => ({
+            ...artist,
+            name: cleanArtistName(artist.name),
+          }));
+          release.tracklist = release.tracklist.map((track) => ({
+            ...track,
+            artists: track.artists.map((artist) => cleanArtistName(artist)),
+          }));
+        }
       }
 
       const session: SessionView = { scan, apply, albums };
