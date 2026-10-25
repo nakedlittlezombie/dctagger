@@ -22,7 +22,7 @@ export in [`stitch_export/`](stitch_export/).
   - top Discogs candidates and cover previews
   - full release tracklist
   - folder and embedded artwork inspection
-  - manual Discogs lookup
+  - manual Discogs **or Deezer** lookup
   - per-file → track mapping with confidence suggestions
   - metadata preview, including the effective genre and its source
 - Duplicate detection per folder with automatic quality ranking
@@ -71,7 +71,8 @@ npm start        # builds UI + bundled server, then serves http://127.0.0.1:4780
    the runner-up by the configured margin, and has a matching track count.
 3. **Review** — unmatched or uncertain albums are queued. Each screen shows the candidates,
    selected release, canonical tracklist, local files, artwork, tag preview, and duplicate
-   groups. Map files to tracks directly; auto-mapping is editable.
+   groups. Map files to tracks directly; auto-mapping is editable. If Discogs has no match,
+   the lookup field offers both **Discogs** and **Deezer** searches.
 4. **Dedupe** — files with the same track number/title and a compatible duration are grouped.
    The best-quality copy wins. Choose:
    - **off** — leave duplicate copies untouched in the source
@@ -100,9 +101,15 @@ Genre tags use this fallback chain:
 3. **MusicBrainz** release-group genres (public API, no credentials)
 4. Existing **local genre tags** in the folder
 
-Deezer is only queried when Discogs has neither genres nor styles. MusicBrainz is only queried
-when both Discogs and Deezer return no genre. Both are best-effort enrichments: failures are
-ignored, responses are cached for 30 days, and **no audio is downloaded** from either service.
+Deezer is only queried automatically for genre when Discogs has neither genres nor styles.
+MusicBrainz is only queried automatically when both Discogs and Deezer return no genre. Both
+are best-effort enrichments: failures are ignored, responses are cached for 30 days, and **no
+audio is downloaded** from either service.
+
+Deezer is also available as a **manual lookup source**. When Discogs has no suitable release,
+the review screen can search Deezer and use its album metadata and tracklist for the match,
+cover art, and tags. Deezer-sourced matches are marked `dz…` in the UI and write a Deezer
+release reference into the tag comment.
 
 The metadata preview shows the effective genre and its source (`Discogs`, `Deezer`,
 `MusicBrainz`, or `Local tags`). The same value is written to the file tags.
@@ -229,7 +236,7 @@ npm run check            # typecheck + boundaries + tests
 src/
   packages/
     discogs/        Discogs client (rate limits, cache, release/track mapping)
-    deezer/         Deezer genre fallback
+    deezer/         Deezer manual lookup + genre fallback
     musicbrainz/    MusicBrainz genre fallback
     matching/       similarity scoring, confidence, file→track mapping
     library/        scanning, dedupe, tag writing, artwork, path planning
@@ -248,7 +255,7 @@ See [src/packages/README.md](src/packages/README.md).
 - **Discogs**: 60 authenticated requests/minute; DCTagger spaces requests, retries 429s, and
   caches search/release responses for 7 days. Image downloads are capped at 1,000/day and
   cached.
-- **Deezer**: ~3 requests/second with 30-day caching; only for genre fallback.
+- **Deezer**: ~3 requests/second with 30-day caching; manual lookups + genre fallback.
 - **MusicBrainz**: 1 request/second with 30-day caching; only after Discogs and Deezer fail.
 
 ## Troubleshooting

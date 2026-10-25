@@ -116,6 +116,8 @@ export interface ReleaseFormat {
 
 export interface DiscogsRelease {
   id: number;
+  /** Metadata source; Discogs releases are the default. */
+  source?: "discogs" | "deezer";
   title: string;
   artists: ReleaseArtist[];
   year?: number;

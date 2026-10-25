@@ -22,6 +22,24 @@ export interface DeezerAlbumInfo {
   label?: string;
   releaseDate?: string;
   url?: string;
+  coverUrl?: string;
+  nbTracks?: number;
+}
+
+export interface DeezerAlbumSummary {
+  albumId: number;
+  title: string;
+  artist?: string;
+  coverUrl?: string;
+  url?: string;
+}
+
+export interface DeezerTrackInfo {
+  title: string;
+  trackPosition?: number;
+  diskNumber?: number;
+  duration?: number;
+  artist?: string;
 }
 
 export interface DeezerClientOptions {
@@ -35,6 +53,8 @@ interface RawSearchAlbum {
   id?: number;
   title?: string;
   artist?: { name?: string };
+  cover_xl?: string;
+  link?: string;
 }
 
 interface RawSearchResponse {
@@ -50,6 +70,22 @@ interface RawAlbum {
   label?: string;
   release_date?: string;
   link?: string;
+  cover_xl?: string;
+  nb_tracks?: number;
+}
+
+interface RawTrack {
+  title?: string;
+  track_position?: number;
+  disk_number?: number;
+  duration?: number;
+  artist?: { name?: string };
+}
+
+interface RawTracksResponse {
+  data?: RawTrack[];
+  total?: number;
+  next?: string;
 }
 
 interface CacheEntry {
@@ -119,6 +155,58 @@ export class DeezerClient {
     return this.getAlbum(best.result.id);
   }
 
+  /** Raw album search used by the manual Deezer lookup flow. */
+  async searchAlbums(
+    artist: string | undefined,
+    album: string,
+    limit = 6,
+  ): Promise<DeezerAlbumSummary[]> {
+    const query = [artist, album].filter(Boolean).join(" ").trim();
+    if (!query) return [];
+    const response = await this.request<RawSearchResponse>("/search/album", {
+      q: query,
+      limit: String(Math.max(1, Math.min(25, limit))),
+    });
+    return (response.data ?? [])
+      .filter(
+        (result): result is RawSearchAlbum & { id: number; title: string } =>
+          typeof result.id === "number" && Boolean(result.title),
+      )
+      .map((result) => ({
+        albumId: result.id,
+        title: result.title,
+        artist: result.artist?.name,
+        coverUrl: result.cover_xl,
+        url: result.link,
+      }));
+  }
+
+  async getAlbumTracks(albumId: number): Promise<DeezerTrackInfo[]> {
+    const tracks: DeezerTrackInfo[] = [];
+    let index = 0;
+    for (let page = 0; page < 5; page += 1) {
+      const response = await this.request<RawTracksResponse>(`/album/${albumId}/tracks`, {
+        limit: "100",
+        index: String(index),
+      });
+      const data = response.data ?? [];
+      for (const track of data) {
+        const title = track.title?.trim();
+        if (!title) continue;
+        tracks.push({
+          title,
+          trackPosition: track.track_position,
+          diskNumber: track.disk_number,
+          duration: track.duration,
+          artist: track.artist?.name,
+        });
+      }
+      if (data.length === 0 || !response.next) break;
+      index += data.length;
+    }
+    return tracks;
+  }
+
   async getAlbum(albumId: number): Promise<DeezerAlbumInfo> {
     const raw = await this.request<RawAlbum>(`/album/${albumId}`, {});
     const genres = (raw.genres?.data ?? [])
@@ -146,6 +234,8 @@ export class DeezerClient {
       label: raw.label,
       releaseDate: raw.release_date,
       url: raw.link,
+      coverUrl: raw.cover_xl,
+      nbTracks: raw.nb_tracks,
     };
   }
 

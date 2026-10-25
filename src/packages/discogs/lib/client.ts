@@ -172,8 +172,18 @@ export class DiscogsClient {
     } catch {
       throw new DiscogsError("Invalid image URL");
     }
-    if (parsed.protocol !== "https:" || !(parsed.hostname === "discogs.com" || parsed.hostname.endsWith(".discogs.com"))) {
-      throw new DiscogsError("Refusing to download a non-Discogs image");
+    if (parsed.protocol !== "https:") {
+      throw new DiscogsError("Refusing to download a non-HTTPS image");
+    }
+    const host = parsed.hostname;
+    const isDiscogsHost = host === "discogs.com" || host.endsWith(".discogs.com");
+    const isDeezerHost =
+      host === "dzcdn.net" ||
+      host.endsWith(".dzcdn.net") ||
+      host === "deezer.com" ||
+      host.endsWith(".deezer.com");
+    if (!isDiscogsHost && !isDeezerHost) {
+      throw new DiscogsError("Refusing to download a non-Discogs/non-Deezer image");
     }
 
     const key = cacheKey(url);
@@ -191,7 +201,9 @@ export class DiscogsClient {
         headers: {
           "User-Agent": this.userAgent,
           Accept: "image/*",
-          ...(this.token ? { Authorization: `Discogs token=${this.token}` } : {}),
+          ...(isDiscogsHost && this.token
+            ? { Authorization: `Discogs token=${this.token}` }
+            : {}),
         },
         signal: AbortSignal.timeout(30_000),
       });

@@ -30,6 +30,8 @@ beforeAll(async () => {
                     id: 301773,
                     title: "Mezzanine",
                     artist: { name: "Massive Attack" },
+                    cover_xl: "https://cdn-images.dzcdn.net/images/cover/mezzanine/1000x1000.jpg",
+                    link: "https://www.deezer.com/album/301773",
                   },
                   {
                     id: 999,
@@ -53,6 +55,32 @@ beforeAll(async () => {
           label: "Circa",
           release_date: "1998-04-20",
           link: "https://www.deezer.com/album/301773",
+          cover_xl: "https://cdn-images.dzcdn.net/images/cover/mezzanine/1000x1000.jpg",
+          nb_tracks: 11,
+        }),
+      );
+      return;
+    }
+
+    if (url.pathname === "/album/301773/tracks") {
+      response.end(
+        JSON.stringify({
+          data: [
+            {
+              title: "Angel",
+              track_position: 1,
+              disk_number: 1,
+              duration: 378,
+              artist: { name: "Massive Attack" },
+            },
+            {
+              title: "Risingson",
+              track_position: 2,
+              disk_number: 1,
+              duration: 299,
+            },
+          ],
+          total: 2,
         }),
       );
       return;
@@ -117,5 +145,32 @@ describe("DeezerClient", () => {
     const before = albumRequests;
     await client().getAlbum(301773);
     expect(albumRequests).toBe(before);
+  });
+
+  it("searches albums and fetches a full tracklist for manual lookups", async () => {
+    const albums = await client().searchAlbums("Massive Attack", "Mezzanine", 2);
+    expect(albums[0]).toMatchObject({
+      albumId: 301773,
+      title: "Mezzanine",
+      coverUrl: "https://cdn-images.dzcdn.net/images/cover/mezzanine/1000x1000.jpg",
+    });
+
+    const tracks = await client().getAlbumTracks(301773);
+    expect(tracks).toEqual([
+      {
+        title: "Angel",
+        trackPosition: 1,
+        diskNumber: 1,
+        duration: 378,
+        artist: "Massive Attack",
+      },
+      {
+        title: "Risingson",
+        trackPosition: 2,
+        diskNumber: 1,
+        duration: 299,
+        artist: undefined,
+      },
+    ]);
   });
 });

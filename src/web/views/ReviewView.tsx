@@ -146,16 +146,16 @@ export function ReviewView({
     setMapping(Object.fromEntries(album.tracks.map((track) => [track.path, null])));
   };
 
-  const lookup = async () => {
+  const lookup = async (source: "discogs" | "deezer" = "discogs") => {
     setWorking(true);
     try {
-      const updated = await api.lookup(album.id, query.trim());
+      const updated = await api.lookup(album.id, query.trim(), source);
       onChanged(updated);
       setQuery("");
       onNotify(
         updated.candidates.length > 0
-          ? `Found ${updated.candidates.length} Discogs match${updated.candidates.length === 1 ? "" : "es"}.`
-          : "No matches found. Try a different search.",
+          ? `Found ${updated.candidates.length} ${source === "deezer" ? "Deezer" : "Discogs"} match${updated.candidates.length === 1 ? "" : "es"}.`
+          : `No ${source === "deezer" ? "Deezer" : "Discogs"} matches found.`,
         updated.candidates.length > 0 ? "success" : "error",
       );
     } catch (cause) {
@@ -265,20 +265,35 @@ export function ReviewView({
     const first = Object.values(mapping).find((value) => value !== null) ?? null;
     return release.tracklist.find((track) => track.index === first);
   }, [mapping, release]);
-  const coverSourceLabel = coverOverride ? "Local override" : release?.coverImage ? "Discogs" : "Folder";
+  const isDeezer = release?.source === "deezer";
+  const releaseIdLabel = release ? `${isDeezer ? "dz" : "r"}${Math.abs(release.id)}` : "";
+  const coverSourceLabel = coverOverride
+    ? "Local override"
+    : release?.coverImage
+      ? isDeezer
+        ? "Deezer"
+        : "Discogs"
+      : "Folder";
   const deezerGenres =
-    release && album.deezer?.releaseId === release.id ? album.deezer.genres : undefined;
+    release && !isDeezer && album.deezer?.releaseId === release.id
+      ? album.deezer.genres
+      : undefined;
   const musicBrainzGenres =
     release && album.musicbrainz?.releaseId === release.id
       ? album.musicbrainz.genres
       : undefined;
+  const releaseHasGenres =
+    release !== undefined &&
+    [...release.genres, ...release.styles].some((genre) => genre?.trim());
   const effectiveGenres = release
     ? releaseGenres(release, album.hints.genres, deezerGenres, musicBrainzGenres)
     : [];
   const genreSource = !release
     ? "—"
-    : [...release.genres, ...release.styles].some((genre) => genre?.trim())
-      ? "Discogs"
+    : releaseHasGenres
+      ? isDeezer
+        ? "Deezer"
+        : "Discogs"
       : deezerGenres?.length
         ? "Deezer"
         : musicBrainzGenres?.length
@@ -410,7 +425,7 @@ export function ReviewView({
                   <span className="chip">
                     {release.formats.map((format) => format.name).join(" ") || "Release"}
                   </span>
-                  <span className="chip">r{release.id}</span>
+                  <span className="chip">{releaseIdLabel}</span>
                   <span className="chip">{coverSourceLabel} art</span>
                 </div>
                 <p className="muted small">
@@ -419,7 +434,7 @@ export function ReviewView({
                     .join(" · ")}
                 </p>
                 <a href={release.uri} target="_blank" rel="noreferrer" className="link-button">
-                  Open on Discogs ↗
+                  Open on {isDeezer ? "Deezer" : "Discogs"} ↗
                 </a>
               </div>
             )}
@@ -428,14 +443,18 @@ export function ReviewView({
           <section className="panel candidates-panel">
             <div className="section-heading tight">
               <div>
-                <div className="eyebrow">Discogs candidates</div>
+                <div className="eyebrow">
+                  {selected?.release.source === "deezer" ? "Deezer candidates" : "Discogs candidates"}
+                </div>
                 <h2>Top matches</h2>
               </div>
               <span className="chip">{album.candidates.length} found</span>
             </div>
             <div className="candidate-list">
               {album.candidates.length === 0 && (
-                <p className="muted small">No matches yet. Search manually below.</p>
+                <p className="muted small">
+                  No matches yet. Search Discogs or Deezer below.
+                </p>
               )}
               {album.candidates.map((candidate) => {
                 const pinned = candidate.release.id === selected?.release.id;
@@ -464,7 +483,7 @@ export function ReviewView({
                         {candidate.release.tracklist.length > 0
                           ? ` · ${candidate.release.tracklist.length} tracks`
                           : ""}
-                        {` · r${candidate.release.id}`}
+                        {` · ${candidate.release.source === "deezer" ? "dz" : "r"}${Math.abs(candidate.release.id)}`}
                       </span>
                     </div>
                     <span
@@ -484,17 +503,25 @@ export function ReviewView({
               className="lookup-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                void lookup();
+                void lookup("discogs");
               }}
             >
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Manual Discogs lookup…"
+                placeholder="Search Discogs or Deezer…"
                 spellCheck={false}
               />
               <button className="button ghost small" type="submit" disabled={working}>
-                Search
+                Discogs
+              </button>
+              <button
+                className="button ghost small"
+                type="button"
+                disabled={working}
+                onClick={() => void lookup("deezer")}
+              >
+                Deezer
               </button>
             </form>
             <p className="muted tiny">
@@ -507,7 +534,7 @@ export function ReviewView({
           <section className="panel tracklist-panel">
             <div className="section-heading">
               <div>
-                <div className="eyebrow">Canonical tracklist</div>
+                <div className="eyebrow">{isDeezer ? "Deezer tracklist" : "Canonical tracklist"}</div>
                 <h2>Track alignment</h2>
                 <p className="muted small">
                   {release
@@ -753,7 +780,7 @@ export function ReviewView({
                 </div>
                 <div className="tag-row">
                   <span>Release ID</span>
-                  <code>r{release.id}</code>
+                  <code>{releaseIdLabel}</code>
                 </div>
                 <div className="tag-row">
                   <span>Cover</span>
@@ -818,7 +845,7 @@ export function ReviewView({
       <div className={applied ? "review-footer applied" : "review-footer"}>
         <div className="review-stage mono">
           {release
-            ? `STAGE: DISCOGS RELEASE r${release.id} · ${assignedCount}/${keptTracks.length} FILES LINKED`
+            ? `STAGE: ${isDeezer ? "DEEZER" : "DISCOGS"} RELEASE ${releaseIdLabel} · ${assignedCount}/${keptTracks.length} FILES LINKED`
             : "STAGE: AWAITING RELEASE SELECTION"}
           {unmapped > 0 && <span className="warn-text"> · {unmapped} UNMAPPED</span>}
           {album.duplicates.length > 0 && (

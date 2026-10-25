@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { DiscogsClient, DiscogsError } from "../../discogs";
-import { DeezerClient } from "../../deezer";
+import {
+  DeezerClient,
+  type DeezerAlbumInfo,
+  type DeezerTrackInfo,
+} from "../../deezer";
 import { MusicBrainzClient } from "../../musicbrainz";
 import {
   albumIdFor,
@@ -16,7 +20,7 @@ import {
   uniqueTracks,
   type CoverArt,
 } from "../../library";
-import { autoMap, isHighConfidence, rankReleases } from "../../matching";
+import { autoMap, isHighConfidence, rankReleases, similarity } from "../../matching";
 import type {
   AlbumFolder,
   ApplyResult,
@@ -118,6 +122,60 @@ function emptyAlbum(folderPath: string, error: string): AlbumFolder {
     autoMatched: false,
     error,
     updatedAt: new Date().toISOString(),
+  };
+}
+
+function formatDuration(seconds: number | undefined): string | undefined {
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return undefined;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
+}
+
+function deezerRelease(
+  info: DeezerAlbumInfo,
+  tracks: DeezerTrackInfo[],
+): DiscogsRelease {
+  const artist = info.artist?.trim() || "Unknown Artist";
+  const discCount = Math.max(1, ...tracks.map((track) => track.diskNumber ?? 1));
+  const tracklist = tracks.map((track, index) => {
+    const disc = track.diskNumber && track.diskNumber > 0 ? track.diskNumber : 1;
+    const trackNumber =
+      track.trackPosition && track.trackPosition > 0 ? track.trackPosition : index + 1;
+    return {
+      index,
+      position:
+        discCount > 1
+          ? `${disc}-${String(trackNumber).padStart(2, "0")}`
+          : String(trackNumber),
+      title: track.title.trim(),
+      duration: formatDuration(track.duration),
+      artists: track.artist ? [track.artist] : [],
+      disc,
+      trackNumber,
+    };
+  });
+  const year = info.releaseDate
+    ? Number.parseInt(info.releaseDate.slice(0, 4), 10)
+    : undefined;
+
+  return {
+    id: -info.albumId,
+    source: "deezer",
+    title: info.title,
+    artists: [{ name: artist }],
+    year: Number.isFinite(year) ? year : undefined,
+    released: info.releaseDate,
+    genres: info.genres,
+    styles: [],
+    labels: info.label ? [{ name: info.label }] : [],
+    formats: [{ name: "Digital", descriptions: ["Album"] }],
+    tracklist,
+    images: info.coverUrl
+      ? [{ uri: info.coverUrl, width: 1000, height: 1000, type: "primary" }]
+      : [],
+    uri: info.url ?? `https://www.deezer.com/album/${info.albumId}`,
+    thumb: info.coverUrl,
+    coverImage: info.coverUrl,
   };
 }
 
@@ -318,18 +376,27 @@ export class AppState {
     return this.session;
   }
 
-  async lookup(albumId: string, query?: string): Promise<AlbumFolder> {
+  async lookup(
+    albumId: string,
+    query?: string,
+    source: "discogs" | "deezer" = "discogs",
+  ): Promise<AlbumFolder> {
     if (this.applyRunning) throw new AppError(409, "Wait for the apply job to finish");
     const album = this.albumOrThrow(albumId);
-    const trimmed = query?.trim();
-    const fallbackArtist = album.hints.artist;
-    const fallbackAlbum = album.hints.album || album.folderName;
-    const useQuery = trimmed || (!fallbackArtist && !fallbackAlbum ? album.folderName : undefined);
+    if (source === "deezer") {
+      await this.matchDeezer(album, query);
+    } else {
+      const trimmed = query?.trim();
+      const fallbackArtist = album.hints.artist;
+      const fallbackAlbum = album.hints.album || album.folderName;
+      const useQuery =
+        trimmed || (!fallbackArtist && !fallbackAlbum ? album.folderName : undefined);
 
-    await this.matchAlbum(album, {
-      allowAuto: false,
-      query: useQuery || undefined,
-    });
+      await this.matchAlbum(album, {
+        allowAuto: false,
+        query: useQuery || undefined,
+      });
+    }
     this.refreshSummary();
     await this.saveSession();
     return album;
@@ -638,7 +705,7 @@ export class AppState {
       album.status = "needs-review";
       album.autoMatched = false;
       album.confidence = undefined;
-      album.error = "No Discogs matches found. Try a manual lookup.";
+      album.error = "No Discogs matches found. Try a Discogs or Deezer manual lookup.";
       album.updatedAt = new Date().toISOString();
       return;
     }
@@ -703,6 +770,112 @@ export class AppState {
 
     album.autoMatched = high;
     album.status = high ? "auto-matched" : "needs-review";
+    album.updatedAt = new Date().toISOString();
+  }
+
+  /**
+   * Manual fallback lookup through Deezer. Unlike the genre fallback this is
+   * user-triggered and builds full candidates (album, cover, tracklist) so the
+   * normal review/tag/apply pipeline can be used with Deezer metadata.
+   */
+  private async matchDeezer(album: AlbumFolder, query?: string): Promise<void> {
+    const unique = uniqueTracks(album.tracks, album.duplicates);
+    if (unique.length === 0) {
+      album.status = "needs-review";
+      album.error = "No unique audio tracks found";
+      album.updatedAt = new Date().toISOString();
+      return;
+    }
+
+    const trimmed = query?.trim();
+    const artist = trimmed ? undefined : album.hints.artist;
+    const albumQuery = trimmed || album.hints.album || album.folderName;
+    const summaries = await this.deezerClient().searchAlbums(artist, albumQuery, 6);
+
+    if (summaries.length === 0) {
+      album.candidates = [];
+      album.selectedReleaseId = undefined;
+      album.mapping = album.tracks.map((track) => ({
+        filePath: track.path,
+        trackIndex: null,
+      }));
+      album.status = "needs-review";
+      album.autoMatched = false;
+      album.confidence = undefined;
+      album.error = "No Deezer matches found. Try a manual Discogs lookup.";
+      album.updatedAt = new Date().toISOString();
+      return;
+    }
+
+    const releases: DiscogsRelease[] = [];
+    const failures: string[] = [];
+    for (const summary of summaries.slice(0, 4)) {
+      try {
+        const info = await this.deezerClient().getAlbum(summary.albumId);
+        const tracks = await this.deezerClient().getAlbumTracks(summary.albumId);
+        if (tracks.length === 0) continue;
+        releases.push(deezerRelease(info, tracks));
+      } catch (error) {
+        failures.push(`${summary.title}: ${messageOf(error)}`);
+      }
+    }
+    if (releases.length === 0) {
+      throw new AppError(502, failures[0] ?? "Could not load Deezer albums");
+    }
+
+    const local = {
+      artist: album.hints.artist,
+      album: album.hints.album,
+      year: album.hints.year,
+      tracks: unique.map((track) => ({
+        title: track.title,
+        fileName: track.fileName,
+        track: track.track,
+        duration: track.duration,
+      })),
+    };
+
+    const ranked = rankReleases(local, releases)
+      .slice(0, 4)
+      .map<MatchCandidate>((entry) => ({
+        release: entry.release,
+        score: entry.score,
+        breakdown: entry.breakdown,
+      }));
+    // A user-entered query is an explicit search: keep Deezer's relevance
+    // order and score against the query text. Empty-query lookups are
+    // hint-based, so rank against the folder.
+    const ordered = trimmed
+      ? releases
+          .map((release) => {
+            const rankedEntry = ranked.find((entry) => entry.release.id === release.id);
+            if (!rankedEntry) return undefined;
+            const artistName = release.artists[0]?.name ?? "";
+            const queryScore = similarity(trimmed, `${artistName} ${release.title}`);
+            return { ...rankedEntry, score: Math.round(queryScore * 10000) / 10000 };
+          })
+          .filter((entry): entry is MatchCandidate => Boolean(entry))
+      : ranked;
+    const top = ordered[0];
+    if (!top) {
+      album.status = "needs-review";
+      album.error = "No Deezer matches found";
+      return;
+    }
+
+    album.candidates = ordered;
+    album.selectedReleaseId = top.release.id;
+    album.confidence = top.score;
+    album.mapping = this.mappingFor(album, top.release);
+    album.deezer = undefined;
+    album.musicbrainz = undefined;
+    await this.enrichGenreFallback(album, top.release);
+    album.status = "needs-review";
+    album.autoMatched = false;
+    album.error =
+      failures.length > 0
+        ? `Some Deezer matches failed to load: ${failures[0]}`
+        : undefined;
     album.updatedAt = new Date().toISOString();
   }
 
@@ -813,16 +986,16 @@ export class AppState {
     album: AlbumFolder,
     release: DiscogsRelease,
   ): Promise<void> {
-    const discogsGenres = [...release.genres, ...release.styles].filter((genre) =>
+    const derivedGenres = [...release.genres, ...release.styles].filter((genre) =>
       genre?.trim(),
     );
-    if (discogsGenres.length > 0) return;
-
-    await this.enrichWithDeezer(album, release);
-    const deezerGenres =
-      album.deezer?.releaseId === release.id ? album.deezer.genres : [];
-    if (deezerGenres.length > 0) return;
-
+    if (derivedGenres.length > 0) return;
+    if (release.source !== "deezer") {
+      await this.enrichWithDeezer(album, release);
+      const deezerGenres =
+        album.deezer?.releaseId === release.id ? album.deezer.genres : [];
+      if (deezerGenres.length > 0) return;
+    }
     await this.enrichWithMusicBrainz(album, release);
   }
 
@@ -915,9 +1088,9 @@ export class AppState {
     }
 
     if (urls.length === 0) {
-      errors.push("This release has no cover art on Discogs");
+      errors.push("This release has no cover art");
     } else {
-      errors.push("Could not download cover art from Discogs");
+      errors.push("Could not download cover art");
     }
     return { cover: null, errors };
   }

@@ -21,6 +21,7 @@ interface ScanBody {
 
 interface LookupBody {
   query?: string;
+  source?: "discogs" | "deezer";
 }
 
 interface ConfirmBody {
@@ -104,7 +105,11 @@ export async function buildServer(options: ServerOptions = {}): Promise<{
     "/api/albums/:id/lookup",
     async (request) => {
       const body = bodyOf<LookupBody>(request);
-      return state.lookup(request.params.id, body.query);
+      return state.lookup(
+        request.params.id,
+        body.query,
+        body.source === "deezer" ? "deezer" : "discogs",
+      );
     },
   );
 
@@ -113,7 +118,7 @@ export async function buildServer(options: ServerOptions = {}): Promise<{
     async (request) => {
       const body = bodyOf<ConfirmBody>(request);
       const releaseId = Number(body.releaseId);
-      if (!Number.isInteger(releaseId) || releaseId <= 0) {
+      if (!Number.isInteger(releaseId) || releaseId === 0) {
         throw new AppError(400, "A release must be selected");
       }
       return state.confirm(request.params.id, {

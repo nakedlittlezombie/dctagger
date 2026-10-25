@@ -62,7 +62,9 @@ function trackNumberOf(track: ReleaseTrack, index: number): number {
 
 function tagComment(release: DiscogsRelease): string {
   const label = release.labels[0];
-  const parts = [`Discogs release ${release.id}`, release.uri];
+  const source = release.source === "deezer" ? "Deezer" : "Discogs";
+  const id = release.source === "deezer" ? Math.abs(release.id) : release.id;
+  const parts = [`${source} release ${id}`, release.uri];
   if (label) parts.push(`${label.name}${label.catno ? ` ${label.catno}` : ""}`);
   return parts.join(" · ");
 }

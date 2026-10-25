@@ -314,9 +314,9 @@ export function SettingsView({ settings, onSaved, onBack }: SettingsViewProps) {
         </p>
         <p className="muted small">
           Genre fallback: Discogs genres/styles → Deezer album genre → MusicBrainz genres →
-          existing local genre tags. Deezer is queried only when Discogs has no genre or style;
-          MusicBrainz only when both Discogs and Deezer are empty. Results are cached for 30
-          days.
+          existing local genre tags. Deezer is queried automatically only when Discogs has no
+          genre or style; MusicBrainz only when both Discogs and Deezer are empty. Results are
+          cached for 30 days. Deezer can also be searched manually from album review.
         </p>
       </section>
 

@@ -62,10 +62,10 @@ export const api = {
     const query = path ? `?path=${encodeURIComponent(path)}` : "";
     return request<FolderListing>(`/api/fs${query}`);
   },
-  lookup: (albumId: string, query: string) =>
+  lookup: (albumId: string, query: string, source: "discogs" | "deezer" = "discogs") =>
     request<AlbumFolder>(`/api/albums/${albumId}/lookup`, {
       method: "POST",
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, source }),
     }),
   confirm: (albumId: string, input: ConfirmInput) =>
     request<AlbumFolder>(`/api/albums/${albumId}/confirm`, {
