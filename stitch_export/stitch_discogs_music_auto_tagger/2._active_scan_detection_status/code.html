@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>dctagger — Active Scan &amp; Detection Status</title>
+<!-- Google Fonts & Material Symbols -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "primary-fixed-dim": "#4cd7f6",
+            "surface-variant": "#31353e",
+            "on-surface": "#dfe2ee",
+            "secondary": "#ffb95f",
+            "secondary-container": "#ee9800",
+            "on-tertiary-container": "#00452e",
+            "primary-fixed": "#acedff",
+            "background": "#0f131c",
+            "secondary-fixed-dim": "#ffb95f",
+            "inverse-surface": "#dfe2ee",
+            "surface-dim": "#0f131c",
+            "surface": "#0f131c",
+            "primary": "#4cd7f6",
+            "on-error-container": "#ffdad6",
+            "surface-container-highest": "#31353e",
+            "on-secondary-fixed-variant": "#653e00",
+            "on-secondary-container": "#5b3800",
+            "outline-variant": "#3d494c",
+            "surface-bright": "#353942",
+            "on-surface-variant": "#bcc9cd",
+            "surface-container-low": "#181c24",
+            "tertiary-container": "#1bbd85",
+            "on-primary-container": "#00424f",
+            "inverse-on-surface": "#2c3039",
+            "on-secondary-fixed": "#2a1700",
+            "on-primary-fixed": "#001f26",
+            "on-primary-fixed-variant": "#004e5c",
+            "surface-container-high": "#262a33",
+            "primary-container": "#06b6d4",
+            "on-tertiary-fixed": "#002113",
+            "surface-container-lowest": "#0a0e16",
+            "on-background": "#dfe2ee",
+            "on-primary": "#003640",
+            "error-container": "#93000a",
+            "on-secondary": "#472a00",
+            "error": "#ffb4ab",
+            "on-tertiary": "#003824",
+            "surface-container": "#1c2028",
+            "secondary-fixed": "#ffddb8",
+            "inverse-primary": "#00687a",
+            "outline": "#869397",
+            "surface-tint": "#4cd7f6",
+            "tertiary-fixed": "#6ffbbe",
+            "tertiary": "#4edea3",
+            "on-error": "#690005",
+            "tertiary-fixed-dim": "#4edea3",
+            "on-tertiary-fixed-variant": "#005236"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-xl": "2rem",
+            "margin-mobile": "1rem",
+            "space-xs": "0.25rem",
+            "margin": "1.5rem",
+            "gutter-mobile": "0.75rem",
+            "space-sm": "0.5rem",
+            "gutter": "1rem",
+            "space-lg": "1.25rem",
+            "space-md": "0.75rem"
+          },
+          "fontFamily": {
+            "headline-md": ["Space Grotesk"],
+            "label-md": ["JetBrains Mono"],
+            "display-lg-mobile": ["Space Grotesk"],
+            "code-md": ["JetBrains Mono"],
+            "body-lg": ["Inter"],
+            "body-sm": ["Inter"],
+            "code-lg": ["JetBrains Mono"],
+            "label-sm": ["JetBrains Mono"],
+            "display-lg": ["Space Grotesk"],
+            "headline-lg": ["Space Grotesk"],
+            "body-md": ["Inter"],
+            "headline-sm": ["Inter"]
+          },
+          "fontSize": {
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "label-md": ["11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "600" }],
+            "display-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "code-md": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "code-lg": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+            "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.08em", "fontWeight": "500" }],
+            "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "headline-sm": ["16px", { "lineHeight": "24px", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    @keyframes spin-slow {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .animate-spin-slow {
+      animation: spin-slow 3s linear infinite;
+    }
+    @keyframes pulse-pip {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    .animate-pip {
+      animation: pulse-pip 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .vu-glow {
+      box-shadow: 0 0 10px rgba(76, 215, 246, 0.35);
+    }
+    .panel-edge {
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .slot-glow {
+      box-shadow: inset 0 0 12px rgba(6, 182, 212, 0.12);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen flex flex-col font-body-md select-none pb-24">
+<!-- TOP APP BAR (from Shared Components JSON: docked, full-width, no border line) -->
+<header class="bg-surface-container-lowest text-primary docked full-width top-0 sticky z-40 px-margin-mobile py-space-sm flex justify-between items-center shadow-md">
+<div class="flex items-center space-x-space-sm">
+<span class="material-symbols-outlined text-primary text-headline-md animate-spin-slow" data-icon="album">album</span>
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md tracking-tight font-bold text-primary leading-tight">dctagger</span>
+<div class="flex items-center space-x-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pip"></span>
+<span class="font-label-sm text-label-sm text-primary tracking-wider uppercase">Scanning...</span>
+</div>
+</div>
+</div>
+<div class="flex items-center space-x-space-sm">
+<div class="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/30 flex items-center space-x-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">NODE:</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">DISCOGS-V2</span>
+</div>
+<button aria-label="Audio telemetry" class="p-1 rounded text-primary hover:text-primary transition-colors duration-150 active:opacity-80">
+<span class="material-symbols-outlined text-headline-sm" data-icon="graphic_eq">graphic_eq</span>
+</button>
+</div>
+</header>
+<!-- MAIN TELEMETRY WORKBENCH CANVAS -->
+<main class="flex-1 px-margin-mobile pt-space-md space-y-space-md max-w-md mx-auto w-full">
+<!-- ACTIVE SCAN PROGRESS CARD -->
+<section class="bg-surface-container-low rounded-xl panel-edge p-space-md relative overflow-hidden slot-glow">
+<!-- Ambient circuit glow top edge -->
+<div class="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-80"></div>
+<div class="flex items-start justify-between mb-space-sm">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant tracking-wider uppercase block">Pipeline Execution</span>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Audio Directory Ingestion</h2>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-headline-lg text-headline-lg font-bold text-primary font-headline-md leading-none">68%</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1">96 / 142 FOLDERS</span>
+</div>
+</div>
+<!-- VU-Styled Meter Bar -->
+<div class="space-y-1 my-space-sm">
+<div class="w-full bg-surface-container-highest rounded-full h-2.5 overflow-hidden p-0.5 flex">
+<div class="bg-gradient-to-r from-primary-container via-primary to-secondary rounded-full h-full vu-glow transition-all duration-500 ease-out" style="width: 68%;"></div>
+</div>
+<div class="flex justify-between font-label-sm text-label-sm text-outline-variant font-mono">
+<span>000_INIT</span>
+<span class="text-primary font-semibold">RATE: 4.8 ALB/SEC</span>
+<span>142_END</span>
+</div>
+</div>
+<!-- Live scanning readout terminal box -->
+<div class="bg-surface-container-lowest rounded-lg border border-outline-variant/40 p-space-sm mt-space-sm flex items-start space-x-2">
+<span class="material-symbols-outlined text-primary text-body-sm mt-0.5 animate-pulse" data-icon="terminal">terminal</span>
+<div class="flex-1 overflow-hidden">
+<div class="flex items-center space-x-1.5">
+<span class="text-primary font-label-sm text-label-sm font-bold">[Scanning]</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">FLAC Metadata Stream</span>
+</div>
+<p class="font-code-md text-code-md text-on-surface truncate mt-0.5 tracking-tight font-mono">
+            /Selected Rips/Boards_of_Canada-Geogaddi_FLAC/
+          </p>
+</div>
+</div>
+</section>
+<!-- REAL-TIME CONFIDENCE TALLY COUNTERS (3-Column Stats Grid) -->
+<section class="grid grid-cols-3 gap-space-xs">
+<!-- High Confidence Badge Card -->
+<div class="bg-surface-container-low rounded-xl panel-edge p-space-sm flex flex-col justify-between relative overflow-hidden">
+<div class="flex items-center justify-between mb-1">
+<span class="w-2 h-2 rounded-full bg-primary animate-pip"></span>
+<span class="font-label-sm text-label-sm text-primary tracking-tight font-bold">&gt;85%</span>
+</div>
+<div class="my-1">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface leading-none block font-headline-md">74</span>
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold block tracking-wider mt-1">Auto-Matched</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant text-[9px] truncate">High confidence</span>
+</div>
+<!-- Review Required Badge Card -->
+<div class="bg-surface-container-low rounded-xl panel-edge p-space-sm flex flex-col justify-between relative overflow-hidden border-secondary/30">
+<div class="flex items-center justify-between mb-1">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm text-secondary tracking-tight font-bold">SPLIT</span>
+</div>
+<div class="my-1">
+<span class="font-headline-lg text-headline-lg font-bold text-secondary leading-none block font-headline-md">18</span>
+<span class="font-label-sm text-label-sm text-secondary uppercase font-bold block tracking-wider mt-1">Needs Review</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant text-[9px] truncate">Multi-pressings</span>
+</div>
+<!-- No Match Badge Card -->
+<div class="bg-surface-container-low rounded-xl panel-edge p-space-sm flex flex-col justify-between relative overflow-hidden">
+<div class="flex items-center justify-between mb-1">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-label-sm text-label-sm text-error tracking-tight font-bold">NULL</span>
+</div>
+<div class="my-1">
+<span class="font-headline-lg text-headline-lg font-bold text-error leading-none block font-headline-md">4</span>
+<span class="font-label-sm text-label-sm text-error uppercase font-bold block tracking-wider mt-1">No Match</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant text-[9px] truncate">Manual search</span>
+</div>
+</section>
+<!-- LIVE ACTIVITY STREAM / TELEMETRY LOG CARD -->
+<section class="bg-surface-container-low rounded-xl panel-edge p-space-md space-y-space-sm">
+<div class="flex items-center justify-between pb-space-xs border-b border-outline-variant/30">
+<div class="flex items-center space-x-1.5">
+<span class="material-symbols-outlined text-primary text-body-sm" data-icon="reorder">reorder</span>
+<span class="font-label-md text-label-md text-on-surface uppercase tracking-wider font-bold">Live Activity Telemetry</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">STREAMING</span>
+</div>
+<!-- Activity Items List -->
+<div class="space-y-space-sm pt-1">
+<!-- Log Item 1: Daft Punk -->
+<div class="p-space-sm rounded-lg bg-surface-container-lowest/80 border border-primary/20 flex items-start space-x- space-x-space-sm hover:border-primary/40 transition-colors">
+<div class="mt-0.5 p-1 rounded bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-body-sm" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">Daft Punk - Discovery</span>
+<span class="font-label-sm text-label-sm text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20 shrink-0 font-bold ml-1">99% MATCH</span>
+</div>
+<p class="font-code-md text-code-md text-on-surface-variant truncate font-mono text-[11px] mt-0.5">
+              (2001, Parlophone - 7243 849606 2 1)
+            </p>
+</div>
+</div>
+<!-- Log Item 2: Massive Attack -->
+<div class="p-space-sm rounded-lg bg-surface-container-lowest/80 border border-primary/20 flex items-start space-x-space-sm hover:border-primary/40 transition-colors">
+<div class="mt-0.5 p-1 rounded bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-body-sm" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">Massive Attack - Mezzanine</span>
+<span class="font-label-sm text-label-sm text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20 shrink-0 font-bold ml-1">96% MATCH</span>
+</div>
+<p class="font-code-md text-code-md text-on-surface-variant truncate font-mono text-[11px] mt-0.5">
+              (1998, Virgin - WBRCD4)
+            </p>
+</div>
+</div>
+<!-- Log Item 3: Radiohead -->
+<div class="p-space-sm rounded-lg bg-surface-container-lowest/80 border border-secondary/30 flex items-start space-x-space-sm hover:border-secondary/50 transition-colors">
+<div class="mt-0.5 p-1 rounded bg-secondary/10 border border-secondary/30 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-body-sm" data-icon="warning" data-weight="fill" style="font-variation-settings: 'FILL' 1;">warning</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-semibold text-secondary truncate">Radiohead - Kid A</span>
+<span class="font-label-sm text-label-sm text-secondary bg-secondary/10 px-1.5 py-0.2 rounded border border-secondary/30 shrink-0 font-bold ml-1">REVIEW (4)</span>
+</div>
+<p class="font-code-md text-code-md text-secondary/80 truncate font-mono text-[11px] mt-0.5">
+              Requires review: 4 pressing matches found
+            </p>
+</div>
+</div>
+</div>
+</section>
+<!-- WORKBENCH CONTROL ACTIONS -->
+<div class="space-y-2 pt-space-xs">
+<!-- Primary: View Review Queue -->
+<button class="w-full py-2.5 px-4 rounded-xl bg-primary-container text-on-primary-container font-headline-md text-body-md font-bold flex items-center justify-center space-x-2 shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-[0.99] transition-all">
+<span class="material-symbols-outlined text-headline-sm" data-icon="rule">rule</span>
+<span>View Review Queue (18 Albums)</span>
+</button>
+<!-- Secondary: Cancel Scan -->
+<button class="w-full py-2 px-4 rounded-xl bg-transparent border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/20 font-label-md text-label-md uppercase tracking-wider flex items-center justify-center space-x-1.5 active:opacity-80 transition-all">
+<span class="material-symbols-outlined text-body-sm" data-icon="close">close</span>
+<span>Cancel Scan</span>
+</button>
+</div>
+</main>
+<!-- BOTTOM NAVIGATION BAR (Exact tokens & classes from Shared Components JSON) -->
+<!-- Logic: Screen 2 is Active Scan, so 'Scan' destination index 0 is active -->
+<nav class="bg-surface-container-lowest text-primary docked full-width bottom-0 fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-margin-mobile py-space-xs shadow-2xl">
+<!-- Item 1: Scan (ACTIVE) -->
+<button aria-label="Scan" class="flex flex-col items-center justify-center text-primary font-bold py-1 active:scale-95 transition-transform duration-100">
+<span class="material-symbols-outlined text-headline-md" data-icon="folder_open" data-weight="fill" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+<span class="font-label-sm text-label-sm tracking-wider">Scan</span>
+</button>
+<!-- Item 2: Match (INACTIVE) -->
+<button aria-label="Match" class="flex flex-col items-center justify-center text-on-surface-variant py-1 hover:text-primary transition-colors duration-150 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-headline-md" data-icon="compare_arrows">compare_arrows</span>
+<span class="font-label-sm text-label-sm tracking-wider">Match</span>
+</button>
+<!-- Item 3: Search (INACTIVE) -->
+<button aria-label="Search" class="flex flex-col items-center justify-center text-on-surface-variant py-1 hover:text-primary transition-colors duration-150 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-headline-md" data-icon="manage_search">manage_search</span>
+<span class="font-label-sm text-label-sm tracking-wider">Search</span>
+</button>
+<!-- Item 4: Batch (INACTIVE) -->
+<button aria-label="Batch" class="flex flex-col items-center justify-center text-on-surface-variant py-1 hover:text-primary transition-colors duration-150 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-headline-md" data-icon="task_alt">task_alt</span>
+<span class="font-label-sm text-label-sm tracking-wider">Batch</span>
+</button>
+</nav>
+</body></html>

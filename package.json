@@ -1,0 +1,48 @@
+{
+  "name": "dctagger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:nakedlittlezombie/dctagger.git"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch src/main.ts",
+    "dev:web": "vite",
+    "build": "npm run typecheck && npm run build:web && npm run build:server",
+    "build:web": "vite build",
+    "build:server": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/server/main.cjs --log-level=warning",
+    "start": "npm run build && node dist/server/main.cjs",
+    "start:prod": "node dist/server/main.cjs",
+    "typecheck": "tsc --noEmit",
+    "lint:boundaries": "depcruise src/packages",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint:boundaries && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "concurrently": "^10.0.6",
+    "dependency-cruiser": "^16.10.4",
+    "esbuild": "^0.28.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.7",
+    "fastify": "^5.12.7",
+    "music-metadata": "^12.3.2",
+    "node-taglib-sharp": "^6.0.3"
+  }
+}

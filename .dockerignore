@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.gitignore
+.dctagger
+.env
+config
+cache
+music
+output
+stitch_export
+stitch_discogs_music_auto_tagger.zip
+*.log
+*.tsbuildinfo
+coverage

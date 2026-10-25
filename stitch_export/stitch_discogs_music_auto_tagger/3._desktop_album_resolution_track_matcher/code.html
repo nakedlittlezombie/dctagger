@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>dctagger // Desktop Album Resolution &amp; Multi-Track Alignment Studio</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Space Grotesk, Inter, JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "error-container": "#93000a",
+            "on-tertiary-fixed": "#002113",
+            "inverse-primary": "#00687a",
+            "secondary-container": "#ee9800",
+            "on-tertiary-fixed-variant": "#005236",
+            "on-tertiary-container": "#00452e",
+            "outline": "#869397",
+            "surface-variant": "#31353e",
+            "on-tertiary": "#003824",
+            "secondary-fixed": "#ffddb8",
+            "surface-container-low": "#181c24",
+            "surface-container": "#1c2028",
+            "on-error": "#690005",
+            "outline-variant": "#3d494c",
+            "surface-container-lowest": "#0a0e16",
+            "surface-tint": "#4cd7f6",
+            "secondary-fixed-dim": "#ffb95f",
+            "surface": "#0f131c",
+            "secondary": "#ffb95f",
+            "primary-fixed": "#acedff",
+            "background": "#0f131c",
+            "on-secondary-container": "#5b3800",
+            "tertiary-fixed": "#6ffbbe",
+            "on-error-container": "#ffdad6",
+            "on-surface-variant": "#bcc9cd",
+            "error": "#ffb4ab",
+            "surface-container-highest": "#31353e",
+            "tertiary-container": "#1bbd85",
+            "inverse-on-surface": "#2c3039",
+            "surface-bright": "#353942",
+            "surface-dim": "#0f131c",
+            "on-primary-container": "#00424f",
+            "on-primary-fixed-variant": "#004e5c",
+            "surface-container-high": "#262a33",
+            "tertiary": "#4edea3",
+            "on-surface": "#dfe2ee",
+            "on-secondary-fixed-variant": "#653e00",
+            "on-primary-fixed": "#001f26",
+            "inverse-surface": "#dfe2ee",
+            "on-primary": "#003640",
+            "primary-container": "#06b6d4",
+            "primary-fixed-dim": "#4cd7f6",
+            "on-secondary-fixed": "#2a1700",
+            "primary": "#4cd7f6",
+            "tertiary-fixed-dim": "#4edea3",
+            "on-background": "#dfe2ee",
+            "on-secondary": "#472a00"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-lg": "1.25rem",
+            "margin": "1.5rem",
+            "margin-mobile": "1rem",
+            "space-sm": "0.5rem",
+            "space-xl": "2rem",
+            "gutter": "1rem",
+            "space-md": "0.75rem",
+            "space-xs": "0.25rem",
+            "gutter-mobile": "0.75rem"
+          },
+          "fontFamily": {
+            "display-lg-mobile": ["Space Grotesk"],
+            "body-sm": ["Inter"],
+            "label-sm": ["JetBrains Mono"],
+            "code-md": ["JetBrains Mono"],
+            "headline-sm": ["Inter"],
+            "headline-lg": ["Space Grotesk"],
+            "display-lg": ["Space Grotesk"],
+            "label-md": ["JetBrains Mono"],
+            "body-md": ["Inter"],
+            "body-lg": ["Inter"],
+            "code-lg": ["JetBrains Mono"],
+            "headline-md": ["Space Grotesk"]
+          },
+          "fontSize": {
+            "display-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.08em", "fontWeight": "500" }],
+            "code-md": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "headline-sm": ["16px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "label-md": ["11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "600" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "code-lg": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Custom rack scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0e16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #262a33;
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3d494c;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      vertical-align: middle;
+      display: inline-block;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1;
+    }
+  </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface antialiased overflow-hidden select-none h-screen flex flex-col">
+<!-- ================= TOP NAV BAR (Shared Component) ================= -->
+<!-- style_shell_layout: flex justify-between items-center w-full px-margin h-14 bg-surface-container-lowest dark:bg-surface-container-lowest z-40 -->
+<!-- style_separation_logic: border-b border-outline-variant/40 dark:border-outline-variant/40 bg-surface-container-lowest dark:bg-surface-container-lowest -->
+<header class="flex justify-between items-center w-full px-margin h-14 bg-surface-container-lowest border-b border-outline-variant/40 z-40 shrink-0">
+<!-- Brand Anchor & Quick Search -->
+<div class="flex items-center gap-space-lg">
+<div class="flex items-center gap-2">
+<span class="text-primary font-headline-sm font-bold tracking-tight uppercase flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary fill" data-icon="album">album</span>
+          dctagger // v2.4.0-pro
+        </span>
+</div>
+<!-- Quick Search Bar (search_bar: on_left) -->
+<div class="relative w-72">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[16px]" data-icon="search">search</span>
+<input class="w-full h-8 pl-8 pr-3 bg-surface-container-low border border-outline-variant/60 rounded text-on-surface font-code-md text-code-md placeholder:text-outline focus:outline-none focus:border-primary transition-colors" placeholder="Search catalog, ISRCs, tags..." type="text"/>
+<span class="absolute right-2 top-1/2 -translate-y-1/2 font-label-sm text-label-sm text-outline border border-outline-variant/60 rounded px-1 py-0.5">⌘K</span>
+</div>
+</div>
+<!-- Navigation Links: Active Match Grid / Inspector -->
+<nav class="hidden md:flex items-center gap-space-lg h-full">
+<a class="text-on-surface-variant hover:text-on-surface font-code-md text-code-md hover:bg-surface-container-high transition-colors duration-150 py-1 px-2 rounded" href="#">Workspace</a>
+<a class="border-b-2 border-primary text-primary pb-1 font-code-lg text-code-lg flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-primary text-[16px]" data-icon="tune">tune</span>
+        Match Grid
+      </a>
+<a class="text-on-surface-variant hover:text-on-surface font-code-md text-code-md hover:bg-surface-container-high transition-colors duration-150 py-1 px-2 rounded" href="#">Inspector</a>
+<a class="text-on-surface-variant hover:text-on-surface font-code-md text-code-md hover:bg-surface-container-high transition-colors duration-150 py-1 px-2 rounded" href="#">Discogs Queue</a>
+<a class="text-on-surface-variant hover:text-on-surface font-code-md text-code-md hover:bg-surface-container-high transition-colors duration-150 py-1 px-2 rounded" href="#">Diff Engine</a>
+<a class="text-on-surface-variant hover:text-on-surface font-code-md text-code-md hover:bg-surface-container-high transition-colors duration-150 py-1 px-2 rounded" href="#">Batch Run</a>
+</nav>
+<!-- Trailing Actions & Icons -->
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-1 border-r border-outline-variant/40 pr-space-md">
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Equalizer Monitoring">
+<span class="material-symbols-outlined text-[18px]" data-icon="graphic_eq">graphic_eq</span>
+</button>
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Local SQLite Tag Cache">
+<span class="material-symbols-outlined text-[18px]" data-icon="database">database</span>
+</button>
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="AcoustID Engine Terminal">
+<span class="material-symbols-outlined text-[18px]" data-icon="terminal">terminal</span>
+</button>
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Settings">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+</button>
+</div>
+<button class="h-8 px-3 rounded border border-outline-variant/60 font-code-md text-code-md text-on-surface hover:bg-surface-container transition-colors active:scale-95 duration-100 ease-out flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="sync">sync</span>
+        Scan Directory
+      </button>
+<button class="h-8 px-3.5 rounded bg-primary-container text-on-primary-container font-code-md text-code-md font-semibold hover:bg-primary transition-colors shadow-sm active:scale-95 duration-100 ease-out flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]" data-icon="check_circle">check_circle</span>
+        Commit Tags
+      </button>
+</div>
+</header>
+<!-- ================= SUB-HEADER NAVIGATION & RESOLUTION BANNER ================= -->
+<section class="h-11 bg-surface-container-low border-b border-outline-variant/40 px-margin flex items-center justify-between shrink-0">
+<div class="flex items-center gap-space-md">
+<!-- Resolution review indicator with status dots -->
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]" data-icon="warning">warning</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Album Resolution Review: <span class="text-primary">3 of 18</span></span>
+</div>
+<!-- Step dots -->
+<div class="flex items-center gap-1 pl-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-primary/30 animate-pulse"></span>
+<span class="w-2 h-2 rounded-full bg-surface-container-highest"></span>
+<span class="w-2 h-2 rounded-full bg-surface-container-highest"></span>
+<span class="w-2 h-2 rounded-full bg-surface-container-highest"></span>
+<span class="text-outline text-label-sm font-label-sm pl-1">...+12</span>
+</div>
+<div class="h-4 w-px bg-outline-variant/60"></div>
+<!-- Path Pill -->
+<div class="flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded px-2.5 py-1 text-on-surface-variant font-code-md text-code-md max-w-xl truncate">
+<span class="material-symbols-outlined text-outline text-[14px]" data-icon="folder">folder</span>
+<span class="text-outline">/Volumes/AudioVault/Unsorted_Rips/</span>
+<span class="text-primary font-medium">Boards of Canada - Geogaddi/</span>
+</div>
+</div>
+<!-- Stepper Controls -->
+<div class="flex items-center gap-2">
+<div class="flex items-center bg-surface-container-lowest border border-outline-variant/40 rounded p-0.5">
+<button class="px-2 py-0.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-code-md text-code-md flex items-center gap-1" title="Previous Album (Shortcut: [ )">
+<span class="material-symbols-outlined text-[14px]" data-icon="arrow_back">arrow_back</span>
+<span>Prev</span>
+<kbd class="text-label-sm font-label-sm bg-surface-container-high px-1 py-0.2 rounded text-outline">[</kbd>
+</button>
+<div class="h-3 w-px bg-outline-variant/40 mx-1"></div>
+<button class="px-2 py-0.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-code-md text-code-md flex items-center gap-1" title="Next Album (Shortcut: ] )">
+<span>Next</span>
+<kbd class="text-label-sm font-label-sm bg-surface-container-high px-1 py-0.2 rounded text-outline">]</kbd>
+<span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<button class="h-7 px-2.5 rounded bg-surface-container border border-secondary/30 text-secondary hover:bg-secondary/10 font-code-md text-code-md flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[14px]" data-icon="fast_forward">fast_forward</span>
+        Skip to Next Ambiguous
+      </button>
+</div>
+</section>
+<!-- ================= MAIN STUDIO BODY (SideNavBar + 3-Column Workspace) ================= -->
+<div class="flex flex-1 overflow-hidden">
+<!-- SIDE NAV BAR (Shared Component Docked Left) -->
+<!-- style_shell_layout: flex flex-col justify-between h-[calc(100vh-3.5rem)] w-64 p-space-sm bg-surface-container-low dark:bg-surface-container-low z-30 -->
+<!-- style_separation_logic: border-r border-outline-variant/40 dark:border-outline-variant/40 bg-surface-container-low dark:bg-surface-container-low -->
+<aside class="flex flex-col justify-between w-60 border-r border-outline-variant/40 bg-surface-container-low p-space-sm shrink-0 z-30">
+<div class="flex flex-col gap-space-sm">
+<!-- Client Status Card -->
+<div class="bg-surface-container-lowest border border-outline-variant/40 rounded p-2.5">
+<div class="flex items-center justify-between">
+<span class="text-label-sm font-label-sm font-semibold tracking-wider text-outline uppercase">DISCOGS CLIENT</span>
+<span class="inline-flex items-center gap-1 text-label-sm font-label-sm text-tertiary">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-ping"></span> ONLINE
+            </span>
+</div>
+<div class="mt-1 flex items-center justify-between text-code-md font-code-md text-on-surface-variant">
+<span>API QUOTA:</span>
+<span class="text-primary font-medium">58/60 RPM</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 rounded-full mt-1.5 overflow-hidden">
+<div class="bg-primary h-full w-[96%]"></div>
+</div>
+</div>
+<!-- Navigation Tabs from JSON -->
+<nav class="flex flex-col gap-0.5 mt-1">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container pl-3 py-2 font-code-md text-code-md flex items-center gap-3 rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="folder_open">folder_open</span>
+<span>Library Roots</span>
+</a>
+<!-- Active tab: Match Grid -->
+<a class="text-primary bg-surface-container-highest/60 border-l-2 border-primary pl-3 py-2 font-code-md text-code-md flex items-center gap-3 rounded-r transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-primary text-[18px]" data-icon="tune">tune</span>
+<span class="font-medium">Match Grid</span>
+<span class="ml-auto text-label-sm font-label-sm bg-secondary/15 text-secondary border border-secondary/30 px-1.5 py-0.5 rounded">18</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container pl-3 py-2 font-code-md text-code-md flex items-center gap-3 rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="album">album</span>
+<span>Artwork Inspector</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container pl-3 py-2 font-code-md text-code-md flex items-center gap-3 rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="compare">compare</span>
+<span>Metadata Diffs</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container pl-3 py-2 font-code-md text-code-md flex items-center gap-3 rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="playlist_play">playlist_play</span>
+<span>Execution Pipeline</span>
+</a>
+</nav>
+<!-- CTA in side rail -->
+<div class="pt-2">
+<button class="w-full py-2 px-3 bg-surface-container-highest/50 hover:bg-surface-container-highest border border-outline-variant/60 rounded text-primary font-code-md text-code-md flex items-center justify-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="fingerprint">fingerprint</span>
+<span>Deep Fingerprint</span>
+</button>
+</div>
+</div>
+<!-- Side Nav Footer Tabs -->
+<div class="border-t border-outline-variant/40 pt-2 flex flex-col gap-0.5">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container pl-3 py-1.5 font-code-md text-code-md flex items-center gap-3 rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="terminal">terminal</span>
+<span>Engine Terminal</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container pl-3 py-1.5 font-code-md text-code-md flex items-center gap-3 rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[16px]" data-icon="dns">dns</span>
+<span>API Settings</span>
+</a>
+</div>
+</aside>
+<!-- WORKSPACE CANVAS (3-Column Layout) -->
+<main class="flex-1 flex overflow-hidden">
+<!-- ================= COLUMN 1: CANDIDATE RELEASES (Left, ~320px) ================= -->
+<section class="w-80 border-r border-outline-variant/40 bg-surface-container-low flex flex-col shrink-0">
+<!-- Section Header -->
+<div class="p-3 border-b border-outline-variant/40 bg-surface-container flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[18px]" data-icon="library_music">library_music</span>
+              Discogs Candidates
+            </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded border border-outline-variant/40">3 found</span>
+</div>
+<!-- Quick Search Bar -->
+<div class="relative">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[15px]" data-icon="filter_alt">filter_alt</span>
+<input class="w-full h-7 pl-8 pr-2 bg-surface-container-lowest border border-outline-variant rounded font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary" type="text" value="r12345 or Boards of Canada Geogaddi"/>
+</div>
+</div>
+<!-- Release Cards List -->
+<div class="flex-1 overflow-y-auto p-2.5 space-y-2.5">
+<!-- CANDIDATE 1 (Selected Card: 78% Confidence) -->
+<div class="p-3 rounded bg-surface-container border-2 border-primary ring-1 ring-primary/40 relative shadow-sm">
+<div class="absolute -top-2 right-2.5 px-2 py-0.5 rounded-full bg-primary text-on-primary-container font-label-sm text-label-sm font-bold flex items-center gap-1 shadow">
+<span class="w-1.5 h-1.5 rounded-full bg-on-primary-container animate-pulse"></span>
+              78% MATCH
+            </div>
+<div class="flex items-start justify-between">
+<div>
+<h4 class="font-headline-sm text-headline-sm text-primary font-bold">Geogaddi (2002 CD)</h4>
+<p class="font-body-sm text-body-sm text-on-surface">Warp Records — WARPCD101</p>
+</div>
+</div>
+<!-- Metadata pills -->
+<div class="mt-2.5 flex flex-wrap gap-1.5">
+<span class="font-code-md text-code-md bg-surface-container-lowest text-primary border border-primary/30 px-1.5 py-0.5 rounded">2xCD</span>
+<span class="font-code-md text-code-md bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60 px-1.5 py-0.5 rounded">UK &amp; Europe</span>
+<span class="font-code-md text-code-md bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60 px-1.5 py-0.5 rounded">23 Tracks</span>
+<span class="font-code-md text-code-md bg-surface-container-lowest text-secondary border border-secondary/30 px-1.5 py-0.5 rounded">Barcode: 5021603101026</span>
+</div>
+<!-- Runout notes -->
+<div class="mt-2.5 pt-2 border-t border-outline-variant/30 text-label-sm font-label-sm text-on-surface-variant space-y-1">
+<p><span class="text-outline">Matrix:</span> WARPCD101-1 01 6 · Sonopress</p>
+<p><span class="text-outline">Mastering:</span> Pressed with occult 66:06 length master</p>
+</div>
+<div class="mt-3 flex items-center justify-between">
+<a class="font-label-sm text-label-sm text-primary hover:underline flex items-center gap-0.5" href="#">
+<span>View on Discogs [r36433]</span>
+<span class="material-symbols-outlined text-[12px]" data-icon="open_in_new">open_in_new</span>
+</a>
+<span class="font-label-sm text-label-sm text-tertiary flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle">check_circle</span> Active Target
+              </span>
+</div>
+</div>
+<!-- CANDIDATE 2: 3xLP Vinyl -->
+<div class="p-3 rounded bg-surface-container border border-outline-variant/50 hover:border-outline hover:bg-surface-container-high cursor-pointer transition-colors">
+<div class="flex items-start justify-between">
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Geogaddi (2002 3xLP Vinyl)</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Warp Records — WARPLP101</p>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary/15 text-secondary border border-secondary/40 px-1.5 py-0.5 rounded font-mono">64% MATCH</span>
+</div>
+<div class="mt-2 flex flex-wrap gap-1.5">
+<span class="font-code-md text-code-md bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60 px-1.5 py-0.5 rounded">3x12" Gatefold</span>
+<span class="font-code-md text-code-md bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60 px-1.5 py-0.5 rounded">180g Virgin Vinyl</span>
+<span class="font-code-md text-code-md bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60 px-1.5 py-0.5 rounded">UK</span>
+</div>
+<div class="mt-2 text-label-sm font-label-sm text-outline">
+              Sides A through F (Side F etched, no audio)
+            </div>
+<div class="mt-3 flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-outline">ID: r12450</span>
+<button class="font-label-sm text-label-sm text-on-surface-variant hover:text-primary border border-outline-variant/60 px-2 py-0.5 rounded hover:bg-surface-container-lowest transition-colors">Select Candidate</button>
+</div>
+</div>
+<!-- CANDIDATE 3: 2013 2xLP Reissue -->
+<div class="p-3 rounded bg-surface-container border border-outline-variant/50 hover:border-outline hover:bg-surface-container-high cursor-pointer transition-colors">
+<div class="flex items-start justify-between">
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Geogaddi (2013 2xLP Reissue)</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Warp Records — BAP0021</p>
+</div>
+<span class="font-label-sm text-label-sm bg-error/15 text-error border border-error/40 px-1.5 py-0.5 rounded font-mono">42% MATCH</span>
+</div>
+<div class="mt-2 flex flex-wrap gap-1.5">
+<span class="font-code-md text-code-md bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60 px-1.5 py-0.5 rounded">2xLP Remaster</span>
+<span class="font-code-md text-code-md bg-surface-container-lowest text-on-surface-variant border border-outline-variant/60 px-1.5 py-0.5 rounded">Optimal Media Pressing</span>
+</div>
+<div class="mt-3 flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-outline">ID: r5020140</span>
+<button class="font-label-sm text-label-sm text-on-surface-variant hover:text-primary border border-outline-variant/60 px-2 py-0.5 rounded hover:bg-surface-container-lowest transition-colors">Select Candidate</button>
+</div>
+</div>
+</div>
+<!-- Release search footer trigger -->
+<div class="p-2 border-t border-outline-variant/40 bg-surface-container-lowest">
+<button class="w-full py-1.5 rounded border border-dashed border-outline-variant text-outline hover:text-primary hover:border-primary font-code-md text-code-md flex items-center justify-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[15px]" data-icon="add">add</span>
+<span>Manual Discogs Release Lookup</span>
+</button>
+</div>
+</section>
+<!-- ================= COLUMN 2: INTERACTIVE TRACK ALIGNMENT MATRIX (Center, Flex) ================= -->
+<section class="flex-1 flex flex-col bg-surface border-r border-outline-variant/40 min-w-0">
+<!-- Matrix Toolbar Header -->
+<div class="h-12 px-4 border-b border-outline-variant/40 bg-surface-container flex items-center justify-between shrink-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]" data-icon="sync_alt">sync_alt</span>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface">File-to-Track Alignment Matrix</span>
+<span class="font-label-sm text-label-sm bg-tertiary-container/20 text-tertiary border border-tertiary/40 px-2 py-0.5 rounded">4 of 23 Tracks Linked</span>
+</div>
+<!-- Alignment Utilities -->
+<div class="flex items-center gap-2">
+<button class="h-7 px-2.5 rounded bg-surface-container-highest/60 hover:bg-surface-container-highest border border-outline-variant/60 text-on-surface font-code-md text-code-md flex items-center gap-1 transition-colors" title="Levenshtein fuzzy title automatic alignment">
+<span class="material-symbols-outlined text-[14px] text-primary" data-icon="auto_fix_high">auto_fix_high</span>
+<span>Auto-Align Files</span>
+</button>
+<button class="h-7 px-2 rounded bg-surface-container-highest/60 hover:bg-surface-container-highest border border-outline-variant/60 text-on-surface font-code-md text-code-md flex items-center gap-1 transition-colors" title="Shift offsets when intro track is missing">
+<span class="material-symbols-outlined text-[14px]" data-icon="exposure_plus_1">exposure_plus_1</span>
+<span>Offset +1</span>
+</button>
+<button class="h-7 px-2 rounded bg-surface-container-highest/60 hover:bg-surface-container-highest border border-outline-variant/60 text-on-surface font-code-md text-code-md flex items-center gap-1 transition-colors" title="Swap selected track pair">
+<span class="material-symbols-outlined text-[14px]" data-icon="swap_vert">swap_vert</span>
+<span>Swap Tool</span>
+</button>
+</div>
+</div>
+<!-- Table Columns Header -->
+<div class="grid grid-cols-12 bg-surface-container-low px-4 py-2 border-b border-outline-variant/40 font-label-md text-label-md uppercase tracking-wider text-outline shrink-0">
+<div class="col-span-1">Pos</div>
+<div class="col-span-4">Discogs Canonical Track</div>
+<div class="col-span-1 text-right">Target</div>
+<div class="col-span-1 text-center">Bridge</div>
+<div class="col-span-4">Local Source File</div>
+<div class="col-span-1 text-right">Delta</div>
+</div>
+<!-- Scrollable Tracks Matrix List -->
+<div class="flex-1 overflow-y-auto divide-y divide-outline-variant/20 p-2 space-y-1.5">
+<!-- ROW 1: Exact Match -->
+<div class="grid grid-cols-12 items-center px-2 py-2 rounded bg-surface-container-low hover:bg-surface-container-high transition-colors group border border-transparent hover:border-outline-variant/40">
+<!-- Pos -->
+<div class="col-span-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-outline group-hover:text-primary cursor-grab text-[14px]" data-icon="drag_indicator">drag_indicator</span>
+<span class="font-code-lg text-code-lg font-bold text-primary">01</span>
+</div>
+<!-- Discogs Canonical -->
+<div class="col-span-4 pr-2">
+<p class="font-code-lg text-code-lg font-semibold text-on-surface truncate">Ready Lets Go</p>
+<p class="font-label-sm text-label-sm text-outline">Disc 1 · Side A · Track 1</p>
+</div>
+<!-- Target Dur -->
+<div class="col-span-1 text-right font-code-md text-code-md text-on-surface-variant">0:59</div>
+<!-- Bridge Connector -->
+<div class="col-span-1 flex items-center justify-center">
+<div class="w-full h-0.5 bg-primary/40 flex items-center justify-center relative">
+<span class="w-2 h-2 rounded-full bg-primary ring-2 ring-primary/20"></span>
+</div>
+</div>
+<!-- Local File -->
+<div class="col-span-4 pl-2 flex items-center gap-2 truncate">
+<span class="material-symbols-outlined text-tertiary text-[16px]" data-icon="audio_file">audio_file</span>
+<div class="truncate">
+<p class="font-code-md text-code-md text-on-surface truncate">01_ready_lets_go.flac</p>
+<p class="font-label-sm text-label-sm text-outline">FLAC 24-bit · 44.1kHz · 912 kbps</p>
+</div>
+</div>
+<!-- Local Dur & Delta -->
+<div class="col-span-1 text-right">
+<span class="font-code-md text-code-md text-on-surface">0:59</span>
+<div class="font-label-sm text-label-sm text-tertiary font-bold">+0:00</div>
+</div>
+</div>
+<!-- ROW 2: Fuzzy Duration Match (+0:01) -->
+<div class="grid grid-cols-12 items-center px-2 py-2 rounded bg-surface-container-low hover:bg-surface-container-high transition-colors group border border-transparent hover:border-outline-variant/40">
+<!-- Pos -->
+<div class="col-span-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-outline group-hover:text-primary cursor-grab text-[14px]" data-icon="drag_indicator">drag_indicator</span>
+<span class="font-code-lg text-code-lg font-bold text-primary">02</span>
+</div>
+<!-- Discogs Canonical -->
+<div class="col-span-4 pr-2">
+<p class="font-code-lg text-code-lg font-semibold text-on-surface truncate">Music Is Math</p>
+<p class="font-label-sm text-label-sm text-outline">Disc 1 · Side A · Track 2</p>
+</div>
+<!-- Target Dur -->
+<div class="col-span-1 text-right font-code-md text-code-md text-on-surface-variant">5:21</div>
+<!-- Bridge Connector -->
+<div class="col-span-1 flex items-center justify-center">
+<div class="w-full h-0.5 bg-secondary/50 flex items-center justify-center relative">
+<span class="w-2 h-2 rounded-full bg-secondary ring-2 ring-secondary/20"></span>
+</div>
+</div>
+<!-- Local File -->
+<div class="col-span-4 pl-2 flex items-center gap-2 truncate">
+<span class="material-symbols-outlined text-secondary text-[16px]" data-icon="audio_file">audio_file</span>
+<div class="truncate">
+<p class="font-code-md text-code-md text-on-surface truncate">02-music_is_math.flac</p>
+<p class="font-label-sm text-label-sm text-outline">FLAC 24-bit · 44.1kHz · 1042 kbps</p>
+</div>
+</div>
+<!-- Local Dur & Delta -->
+<div class="col-span-1 text-right">
+<span class="font-code-md text-code-md text-on-surface">5:22</span>
+<div class="font-label-sm text-label-sm text-secondary font-bold">+0:01</div>
+</div>
+</div>
+<!-- ROW 3: Exact Match with filename mismatch handled -->
+<div class="grid grid-cols-12 items-center px-2 py-2 rounded bg-surface-container-low hover:bg-surface-container-high transition-colors group border border-transparent hover:border-outline-variant/40">
+<!-- Pos -->
+<div class="col-span-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-outline group-hover:text-primary cursor-grab text-[14px]" data-icon="drag_indicator">drag_indicator</span>
+<span class="font-code-lg text-code-lg font-bold text-primary">03</span>
+</div>
+<!-- Discogs Canonical -->
+<div class="col-span-4 pr-2">
+<p class="font-code-lg text-code-lg font-semibold text-on-surface truncate">Beware the Friendly Stranger</p>
+<p class="font-label-sm text-label-sm text-outline">Disc 1 · Side A · Track 3</p>
+</div>
+<!-- Target Dur -->
+<div class="col-span-1 text-right font-code-md text-code-md text-on-surface-variant">0:37</div>
+<!-- Bridge Connector -->
+<div class="col-span-1 flex items-center justify-center">
+<div class="w-full h-0.5 bg-primary/40 flex items-center justify-center relative">
+<span class="w-2 h-2 rounded-full bg-primary ring-2 ring-primary/20"></span>
+</div>
+</div>
+<!-- Local File -->
+<div class="col-span-4 pl-2 flex items-center gap-2 truncate">
+<span class="material-symbols-outlined text-tertiary text-[16px]" data-icon="audio_file">audio_file</span>
+<div class="truncate">
+<p class="font-code-md text-code-md text-on-surface truncate">track03_friendly_stranger.flac</p>
+<p class="font-label-sm text-label-sm text-outline">FLAC 24-bit · 44.1kHz · 820 kbps</p>
+</div>
+</div>
+<!-- Local Dur & Delta -->
+<div class="col-span-1 text-right">
+<span class="font-code-md text-code-md text-on-surface">0:37</span>
+<div class="font-label-sm text-label-sm text-tertiary font-bold">+0:00</div>
+</div>
+</div>
+<!-- ROW 4: Gyroscope Match -->
+<div class="grid grid-cols-12 items-center px-2 py-2 rounded bg-surface-container-low hover:bg-surface-container-high transition-colors group border border-transparent hover:border-outline-variant/40">
+<!-- Pos -->
+<div class="col-span-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-outline group-hover:text-primary cursor-grab text-[14px]" data-icon="drag_indicator">drag_indicator</span>
+<span class="font-code-lg text-code-lg font-bold text-primary">04</span>
+</div>
+<!-- Discogs Canonical -->
+<div class="col-span-4 pr-2">
+<p class="font-code-lg text-code-lg font-semibold text-on-surface truncate">Gyroscope</p>
+<p class="font-label-sm text-label-sm text-outline">Disc 1 · Side A · Track 4</p>
+</div>
+<!-- Target Dur -->
+<div class="col-span-1 text-right font-code-md text-code-md text-on-surface-variant">3:34</div>
+<!-- Bridge Connector -->
+<div class="col-span-1 flex items-center justify-center">
+<div class="w-full h-0.5 bg-primary/40 flex items-center justify-center relative">
+<span class="w-2 h-2 rounded-full bg-primary ring-2 ring-primary/20"></span>
+</div>
+</div>
+<!-- Local File -->
+<div class="col-span-4 pl-2 flex items-center gap-2 truncate">
+<span class="material-symbols-outlined text-tertiary text-[16px]" data-icon="audio_file">audio_file</span>
+<div class="truncate">
+<p class="font-code-md text-code-md text-on-surface truncate">04_gyroscope.flac</p>
+<p class="font-label-sm text-label-sm text-outline">FLAC 24-bit · 44.1kHz · 995 kbps</p>
+</div>
+</div>
+<!-- Local Dur & Delta -->
+<div class="col-span-1 text-right">
+<span class="font-code-md text-code-md text-on-surface">3:34</span>
+<div class="font-label-sm text-label-sm text-tertiary font-bold">+0:00</div>
+</div>
+</div>
+<!-- ROW 5: Unaligned Local File Waiting Assignment -->
+<div class="grid grid-cols-12 items-center px-2 py-2 rounded bg-surface-container/50 border border-dashed border-outline-variant/60">
+<div class="col-span-1 flex items-center gap-1">
+<span class="font-code-lg text-code-lg font-bold text-outline">05</span>
+</div>
+<div class="col-span-4 pr-2">
+<p class="font-code-lg text-code-lg text-on-surface-variant font-medium">Dandelion</p>
+<p class="font-label-sm text-label-sm text-outline">Disc 1 · Side B · Track 1</p>
+</div>
+<div class="col-span-1 text-right font-code-md text-code-md text-outline">1:15</div>
+<div class="col-span-1 flex items-center justify-center">
+<span class="material-symbols-outlined text-outline text-[16px]" data-icon="more_horiz">more_horiz</span>
+</div>
+<div class="col-span-4 pl-2">
+<div class="h-8 border border-dashed border-primary/40 bg-surface-container-lowest/80 rounded flex items-center justify-center text-primary font-code-md text-code-md cursor-pointer hover:bg-primary/5 transition-colors">
+<span class="material-symbols-outlined text-[14px] mr-1" data-icon="add_circle">add_circle</span> Drop / Select matching track file
+              </div>
+</div>
+<div class="col-span-1 text-right">
+<span class="font-label-sm text-label-sm text-outline">--:--</span>
+</div>
+</div>
+<!-- ROW 6: Sunshine Recorder Preview -->
+<div class="grid grid-cols-12 items-center px-2 py-2 rounded bg-surface-container/30 border border-outline-variant/20">
+<div class="col-span-1">
+<span class="font-code-lg text-code-lg font-bold text-outline">06</span>
+</div>
+<div class="col-span-4 pr-2">
+<p class="font-code-lg text-code-lg text-on-surface-variant">Sunshine Recorder</p>
+<p class="font-label-sm text-label-sm text-outline">Disc 1 · Side B · Track 2</p>
+</div>
+<div class="col-span-1 text-right font-code-md text-code-md text-outline">6:12</div>
+<div class="col-span-1 text-center text-outline">...</div>
+<div class="col-span-4 pl-2 font-code-md text-code-md text-outline italic">06_sunshine_recorder.flac (queued)</div>
+<div class="col-span-1 text-right font-code-md text-code-md text-outline">6:13</div>
+</div>
+<!-- Remainder collapse indicator -->
+<div class="p-2 text-center bg-surface-container-low border border-outline-variant/30 rounded">
+<button class="font-label-sm text-label-sm text-primary hover:underline flex items-center justify-center gap-1 w-full">
+<span class="material-symbols-outlined text-[14px]" data-icon="unfold_more">unfold_more</span>
+              Expand remaining 17 tracks of 23
+            </button>
+</div>
+</div>
+<!-- Matrix Status Footer Banner -->
+<div class="p-2 px-4 bg-surface-container-lowest border-t border-outline-variant/40 flex items-center justify-between text-code-md font-code-md">
+<div class="flex items-center gap-3">
+<span class="text-outline">Total Runtime:</span>
+<span class="text-on-surface font-semibold">66:06 (Discogs CD Master)</span>
+<span class="text-tertiary">Δ -0:01 overall</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">ISRC Audio Fingerprint Match Confirmed</span>
+</div>
+</div>
+</section>
+<!-- ================= COLUMN 3: ARTWORK & METADATA DIFF INSPECTOR (Right, ~380px) ================= -->
+<section class="w-96 bg-surface-container-low flex flex-col shrink-0 overflow-y-auto">
+<!-- Top Section Header -->
+<div class="p-3 border-b border-outline-variant/40 bg-surface-container flex items-center justify-between shrink-0">
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[18px]" data-icon="art_track">art_track</span>
+            Artwork &amp; Metadata Inspector
+          </span>
+<span class="font-label-sm text-label-sm text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded">DIFF VIEW</span>
+</div>
+<!-- 1. ARTWORK COMPARISON -->
+<div class="p-3 border-b border-outline-variant/40 space-y-2.5">
+<div class="flex items-center justify-between">
+<h5 class="font-label-md text-label-md text-outline uppercase tracking-wider">Cover Art Comparison</h5>
+<span class="text-label-sm font-label-sm text-tertiary">High-Res Upgrade Available</span>
+</div>
+<!-- Dual 1:1 Image Split -->
+<div class="grid grid-cols-2 gap-2">
+<!-- Local Embedded Artwork -->
+<div class="bg-surface-container-lowest border border-outline-variant/60 rounded p-2 flex flex-col items-center">
+<div class="w-full aspect-square bg-surface-container-high rounded overflow-hidden relative border border-outline-variant/40 mb-2">
+<img class="w-full h-full object-cover" data-alt="A low resolution digital photo of the album cover for Geogaddi by Boards of Canada showing a dark warm kaleidoscope pattern of trees and silhouettes in tones of burnt orange, mustard yellow, and deep obsidian black in a utilitarian audio archivist inspector view." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIi0kmSIfFlqL9njCo98RidpOZ5dUbD7WFnxOQoVmws9KywDVUjz37uHXAA57VLedcydd5JlZDH5vW4dO9x2zMMDGG29d9fzBXG3NCsZgfVcXX6-80qXtXnl-XZrqacvrXO7FPd-Hhr2s1Z473X9p45hEYSXJhRDGYGEXLMGZ3HJYHAvy-sC3eCZ0HKhvlmYpVlYbTev9-Dn7NYvngH9H93VranVFeltds3fhI0gSNdm65cMsDqF03"/>
+<span class="absolute top-1 left-1 bg-surface-container-lowest/80 text-on-surface text-label-sm font-label-sm px-1 rounded border border-outline-variant/40">LOCAL</span>
+</div>
+<p class="font-code-md text-code-md text-on-surface truncate w-full text-center">folder.jpg</p>
+<p class="font-label-sm text-label-sm text-outline">800 × 800 · 420 KB</p>
+<label class="mt-2 flex items-center gap-1.5 text-label-sm font-label-sm text-on-surface-variant cursor-pointer">
+<input class="text-primary focus:ring-0 bg-surface-container border-outline" name="art_choice" type="radio"/>
+<span>Keep Local</span>
+</label>
+</div>
+<!-- Discogs Master Canonical Artwork -->
+<div class="bg-surface-container-lowest border-2 border-primary rounded p-2 flex flex-col items-center relative shadow-sm">
+<div class="w-full aspect-square bg-surface-container-high rounded overflow-hidden relative border border-primary/40 mb-2">
+<img class="w-full h-full object-cover" data-alt="A high resolution archival scan of the official Discogs release cover for Boards of Canada Geogaddi featuring an intricate concentric circular mandala kaleidoscope of children in autumn woods rendered in rich saturated turquoise, solarized amber, and deep studio slate tones under razor sharp mastering light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmz3fMpHuX62XnpRUhUgf5DBc28Zl9RAdaN__RkkF--LMqvhcbFnG-ILueVIWs_pKD92eerGmtayu9Q2dKdDObI0kxeNmpHu0x_FZ9oNDrl3ib6sLTUALTGXBDNQj0Qyzm1msCXagd4aFdIJkN7BpmqlDCgD0ngmaLQqG-ZD13lFhDTxvb2C6M3qxyTOT5RZxlxqCyy8cSekvT32Uz1uzj9CcXisE5BoROM8Jv0RhX9Oq4UZpkPr0F"/>
+<span class="absolute top-1 left-1 bg-primary text-on-primary-container text-label-sm font-label-sm font-bold px-1 rounded shadow">CANONICAL</span>
+</div>
+<p class="font-code-md text-code-md text-primary font-medium truncate w-full text-center">WARPCD101.jpg</p>
+<p class="font-label-sm text-label-sm text-tertiary font-semibold">1400 × 1400 · 1.9 MB</p>
+<label class="mt-2 flex items-center gap-1.5 text-label-sm font-label-sm text-primary font-bold cursor-pointer">
+<input checked="" class="text-primary focus:ring-0 bg-surface-container border-primary" name="art_choice" type="radio"/>
+<span>Replace with High-Res</span>
+</label>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<button class="text-label-sm font-label-sm text-outline hover:text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]" data-icon="crop">crop</span> Crop / Extract Backcover
+            </button>
+<label class="flex items-center gap-1.5 text-label-sm font-label-sm text-on-surface-variant cursor-pointer">
+<input checked="" class="rounded text-primary focus:ring-0 bg-surface-container border-outline" type="checkbox"/>
+<span>Save copy to folder root</span>
+</label>
+</div>
+</div>
+<!-- 2. METADATA DIFF TABLE -->
+<div class="flex-1 p-3 space-y-2.5">
+<div class="flex items-center justify-between">
+<h5 class="font-label-md text-label-md text-outline uppercase tracking-wider">Metadata Tag Diffs</h5>
+<span class="font-label-sm text-label-sm text-outline">8 Fields Ready</span>
+</div>
+<!-- Diff Table -->
+<div class="border border-outline-variant/40 rounded bg-surface-container-lowest overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container border-b border-outline-variant/40 font-label-sm text-label-sm text-outline uppercase">
+<th class="py-1.5 px-2.5 w-20">Tag Field</th>
+<th class="py-1.5 px-2 border-r border-outline-variant/30">Local Tag</th>
+<th class="py-1.5 px-2.5 text-primary">Discogs Canonical</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/20 font-code-md text-code-md">
+<!-- Title -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Title</td>
+<td class="py-1.5 px-2 text-on-surface-variant line-through opacity-70 border-r border-outline-variant/30">Geogaddi (Disc 1)</td>
+<td class="py-1.5 px-2.5 text-primary font-semibold bg-primary/5">Geogaddi</td>
+</tr>
+<!-- Artist -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Artist</td>
+<td class="py-1.5 px-2 text-on-surface-variant border-r border-outline-variant/30">Boards of Canada</td>
+<td class="py-1.5 px-2.5 text-on-surface">Boards of Canada</td>
+</tr>
+<!-- Album -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Album</td>
+<td class="py-1.5 px-2 text-on-surface-variant line-through opacity-70 border-r border-outline-variant/30">Geogaddi [WARPCD101]</td>
+<td class="py-1.5 px-2.5 text-primary font-semibold bg-primary/5">Geogaddi</td>
+</tr>
+<!-- Year -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Year</td>
+<td class="py-1.5 px-2 text-on-surface-variant line-through opacity-70 border-r border-outline-variant/30">2001</td>
+<td class="py-1.5 px-2.5 text-tertiary font-semibold bg-primary/5">2002-02-18</td>
+</tr>
+<!-- Genre -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Genre</td>
+<td class="py-1.5 px-2 text-on-surface-variant border-r border-outline-variant/30">Electronic</td>
+<td class="py-1.5 px-2.5 text-on-surface">Electronic</td>
+</tr>
+<!-- Style -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Style</td>
+<td class="py-1.5 px-2 text-on-surface-variant line-through opacity-70 border-r border-outline-variant/30">Ambient</td>
+<td class="py-1.5 px-2.5 text-primary font-semibold bg-primary/5">IDM, Downtempo, Illbient</td>
+</tr>
+<!-- Catalog# -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Catalog#</td>
+<td class="py-1.5 px-2 text-outline italic border-r border-outline-variant/30">&lt;empty&gt;</td>
+<td class="py-1.5 px-2.5 text-primary font-semibold bg-primary/5">WARPCD101</td>
+</tr>
+<!-- Barcode -->
+<tr class="hover:bg-surface-container-high/40">
+<td class="py-1.5 px-2.5 text-outline font-label-sm text-label-sm font-medium">Barcode</td>
+<td class="py-1.5 px-2 text-outline italic border-r border-outline-variant/30">&lt;empty&gt;</td>
+<td class="py-1.5 px-2.5 text-primary font-semibold bg-primary/5">5021603101026</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Secondary Audio Stream Properties -->
+<div class="bg-surface-container rounded p-2.5 border border-outline-variant/40 space-y-1.5">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider block">Container Technical Specs</span>
+<div class="grid grid-cols-2 gap-2 text-code-md font-code-md">
+<div>
+<span class="text-outline">Encoding:</span>
+<span class="text-on-surface pl-1">FLAC 1.3.3</span>
+</div>
+<div>
+<span class="text-outline">ReplayGain:</span>
+<span class="text-tertiary pl-1">+1.2 dB (Album)</span>
+</div>
+<div>
+<span class="text-outline">Fingerprint:</span>
+<span class="text-on-surface pl-1">Chromaprint ID3v2</span>
+</div>
+<div>
+<span class="text-outline">Channels:</span>
+<span class="text-on-surface pl-1">2ch Stereo</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- ================= BOTTOM STICKY ACTION BAR ================= -->
+<footer class="h-14 bg-surface-container-lowest border-t border-outline-variant/40 px-margin flex items-center justify-between shrink-0 z-40">
+<!-- Left Button: Search Discogs Manually -->
+<div class="flex items-center gap-space-sm">
+<button class="h-9 px-3.5 rounded border border-outline-variant/60 hover:border-outline bg-surface-container-low text-on-surface font-code-md text-code-md flex items-center gap-2 transition-colors active:scale-95 duration-100 ease-out">
+<span class="material-symbols-outlined text-outline text-[16px]" data-icon="search">search</span>
+<span>Search Discogs Manually</span>
+</button>
+<button class="h-9 px-3 rounded border border-outline-variant/60 hover:border-outline bg-surface-container-low text-on-surface font-code-md text-code-md flex items-center gap-2 transition-colors active:scale-95 duration-100 ease-out">
+<span class="material-symbols-outlined text-outline text-[16px]" data-icon="fingerprint">fingerprint</span>
+<span>Re-fetch Acoustic Fingerprint</span>
+</button>
+</div>
+<!-- Middle Info Pill -->
+<div class="hidden lg:flex items-center gap-2 font-code-md text-code-md text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span>Stage: <strong class="text-on-surface">Discogs Release r36433 Matched</strong> — 4 files auto-assigned, 19 queued</span>
+</div>
+<!-- Right Action Group -->
+<div class="flex items-center gap-space-md">
+<!-- Reject Button -->
+<button class="h-9 px-3.5 rounded bg-error-container/20 hover:bg-error-container/40 border border-error/40 text-error font-code-md text-code-md flex items-center gap-1.5 transition-colors active:scale-95 duration-100 ease-out">
+<span class="material-symbols-outlined text-[16px]" data-icon="cancel">cancel</span>
+<span>Reject &amp; Mark Unmatched</span>
+</button>
+<!-- Prominent Primary Action Button -->
+<button class="h-9 px-5 rounded bg-primary text-surface-container-lowest font-code-md text-code-md font-bold tracking-tight shadow-[0_0_14px_rgba(6,182,212,0.4)] hover:bg-primary-fixed hover:shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center gap-2 transition-all active:scale-95 duration-100 ease-out">
+<span>Confirm Album Match &amp; Next</span>
+<kbd class="text-label-sm font-label-sm bg-surface-container-lowest/20 px-1 py-0.5 rounded text-surface-container-lowest">Ctrl+Enter</kbd>
+<span class="material-symbols-outlined text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</footer>
+</body></html>

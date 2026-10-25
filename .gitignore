@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.dctagger/
+.env
+config/
+cache/
+music/
+output/
+*.tsbuildinfo
+*.log
+stitch_discogs_music_auto_tagger.zip
