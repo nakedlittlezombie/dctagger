@@ -310,7 +310,8 @@ export function SettingsView({ settings, onSaved, onBack }: SettingsViewProps) {
           runner-up by the margin, and its track count matches your folder. Discogs allows 60
           authenticated requests per minute (25 unauthenticated); DCTagger spaces API calls to
           stay under that, caches responses for 7 days, and limits image downloads to 1,000 per
-          day. Cached images don’t count against the image budget.
+          day. Cached images don’t count against the image budget. When the daily limit is
+          reached, apply falls back to artwork already in the album folder.
         </p>
         <p className="muted small">
           Genre fallback: Discogs genres/styles → Deezer album genre → MusicBrainz genres →

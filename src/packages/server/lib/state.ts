@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promi
 import os from "node:os";
 import path from "node:path";
 
-import { DiscogsClient, DiscogsError } from "../../discogs";
+import { DiscogsClient, DiscogsError, ImageBudgetExceededError } from "../../discogs";
 import {
   DeezerClient,
   type DeezerAlbumInfo,
@@ -29,6 +29,7 @@ import type {
   DiscogsIdentity,
   DiscogsRelease,
   FolderListing,
+  LocalImage,
   MatchCandidate,
   PublicSettings,
   ScanState,
@@ -1211,24 +1212,23 @@ export class AppState {
     }
   }
 
+  /**
+   * Resolve cover art for an album: an explicit local override first, then
+   * remote Discogs/Deezer art. If the shared image budget is spent mid-run,
+   * fall back to artwork already in the album folder so the pipeline keeps
+   * going instead of failing the album.
+   */
   private async coverFor(
     album: AlbumFolder,
     release: DiscogsRelease,
-  ): Promise<{ cover: CoverArt | null; errors: string[] }> {    const errors: string[] = [];
+  ): Promise<{ cover: CoverArt | null; errors: string[] }> {
+    const errors: string[] = [];
 
     if (album.coverOverride) {
       const image = album.images.find((entry) => entry.path === album.coverOverride);
       if (image) {
-        try {
-          const data = await readFile(image.path);
-          const extension = path.extname(image.path).replace(/^\./, "") || "jpg";
-          return {
-            cover: { data, contentType: image.mimeType, extension },
-            errors,
-          };
-        } catch (error) {
-          errors.push(`Could not read local cover art: ${messageOf(error)}`);
-        }
+        const cover = await this.localCover([image], errors);
+        if (cover) return { cover, errors: [] };
       }
     }
 
@@ -1238,6 +1238,7 @@ export class AppState {
     ].filter((url, index, all) => all.indexOf(url) === index);
 
     const imageClient = this.imageClient();
+    let budgetExceeded: ImageBudgetExceededError | undefined;
     for (const url of urls.slice(0, 3)) {
       try {
         const downloaded = await imageClient.downloadImage(url);
@@ -1250,8 +1251,24 @@ export class AppState {
           errors: [],
         };
       } catch (error) {
+        // Cached images still resolve after budget exhaustion, so stop probing
+        // URLs and use the folder's own art instead of failing every album.
+        if (error instanceof ImageBudgetExceededError) {
+          budgetExceeded = error;
+          break;
+        }
         errors.push(messageOf(error));
       }
+    }
+
+    if (budgetExceeded) {
+      const fallbackImages = album.images.filter(
+        (image) => image.path !== album.coverOverride,
+      );
+      const cover = await this.localCover(fallbackImages, errors);
+      if (cover) return { cover, errors: [] };
+      errors.push(messageOf(budgetExceeded));
+      return { cover: null, errors };
     }
 
     if (urls.length === 0) {
@@ -1260,6 +1277,23 @@ export class AppState {
       errors.push("Could not download cover art");
     }
     return { cover: null, errors };
+  }
+
+  /** Read the first usable image from the album's local artwork. */
+  private async localCover(
+    images: LocalImage[],
+    errors: string[],
+  ): Promise<CoverArt | null> {
+    for (const image of images) {
+      try {
+        const data = await readFile(image.path);
+        const extension = path.extname(image.path).replace(/^\./, "") || "jpg";
+        return { data, contentType: image.mimeType, extension };
+      } catch (error) {
+        errors.push(`Could not read local cover art: ${messageOf(error)}`);
+      }
+    }
+    return null;
   }
 
   private refreshSummary(): void {

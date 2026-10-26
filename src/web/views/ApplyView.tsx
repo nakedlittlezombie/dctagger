@@ -144,7 +144,9 @@ export function ApplyView({
               <span>Existing extras (cue, log, art) transferred</span>
               <span>Unmapped audio left in the source</span>
             </div>
-            <div className="pipeline-foot">Image cache + 1,000/day Discogs cap</div>
+            <div className="pipeline-foot">
+              Image cache + 1,000/day cap · falls back to local art
+            </div>
           </div>
 
           <div className="pipeline-card">

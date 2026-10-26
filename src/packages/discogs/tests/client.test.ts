@@ -1,11 +1,11 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { DiscogsClient, normalizeDiscogsToken } from "../index";
+import { DiscogsClient, ImageBudgetExceededError, normalizeDiscogsToken } from "../index";
 
 let server: http.Server;
 let baseUrl = "";
@@ -172,5 +172,21 @@ describe("DiscogsClient", () => {
     await expect(bad.searchReleases({ query: "bad", limit: 2 })).rejects.toThrow(
       /Personal Access Token/,
     );
+  });
+
+  it("raises a distinct error when the daily image budget is spent", async () => {
+    const imageDir = path.join(cacheDir, "images");
+    await mkdir(imageDir, { recursive: true });
+    await writeFile(
+      path.join(imageDir, "budget.json"),
+      JSON.stringify({ day: new Date().toISOString().slice(0, 10), count: 1000 }),
+    );
+    try {
+      await expect(
+        client().downloadImage("https://i.discogs.com/uncached-cover.jpg"),
+      ).rejects.toBeInstanceOf(ImageBudgetExceededError);
+    } finally {
+      await rm(imageDir, { recursive: true, force: true });
+    }
   });
 });

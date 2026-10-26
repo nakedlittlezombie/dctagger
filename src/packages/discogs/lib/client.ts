@@ -21,6 +21,17 @@ export class DiscogsError extends Error {
   }
 }
 
+/**
+ * The daily image download budget is spent. Callers can still use cached
+ * images, embedded art, or artwork already present in the album folder.
+ */
+export class ImageBudgetExceededError extends DiscogsError {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImageBudgetExceededError";
+  }
+}
+
 export interface DiscogsClientOptions {
   token: string;
   baseUrl?: string;
@@ -279,7 +290,7 @@ export class DiscogsClient {
       // first image today
     }
     if (budget.count >= IMAGE_DAILY_LIMIT) {
-      throw new DiscogsError(
+      throw new ImageBudgetExceededError(
         "Daily Discogs image limit reached (1,000/day). Cached art still works; try again tomorrow.",
       );
     }
