@@ -188,7 +188,14 @@ export interface AppliedInfo {
 
 export interface AlbumFolder {
   id: string;
+  /** Primary folder; the one that names the album and owns its identity. */
   path: string;
+  /**
+   * Every folder that contributed files, primary included. Absent means the
+   * album lives in `path` alone. Set when several folders were merged into one
+   * album (a release split across discs, duplicate rips in different places).
+   */
+  sourceFolders?: string[];
   folderName: string;
   tracks: LocalTrack[];
   images: LocalImage[];
@@ -202,6 +209,12 @@ export interface AlbumFolder {
   mapping: TrackAssignment[];
   /** Groups of files that represent the same track in this folder. */
   duplicates: DuplicateGroup[];
+  /**
+   * Paths the user explicitly ruled out of duplicate detection. These files are
+   * treated as unique tracks: they can be mapped, tagged, and transferred even
+   * when a detector thought they were a copy.
+   */
+  dedupeIgnores?: string[];
   /** Deezer metadata used as a genre fallback for the selected release. */
   deezer?: DeezerReleaseMatch;
   /** MusicBrainz metadata used when Discogs and Deezer have no genre. */
@@ -213,6 +226,14 @@ export interface AlbumFolder {
   error?: string;
   applied?: AppliedInfo;
   updatedAt: string;
+}
+
+export interface MergeSuggestion {
+  /** Albums that look like the same release, in scan order. */
+  albumIds: string[];
+  /** 0–1 confidence that these folders belong together. */
+  score: number;
+  reason: string;
 }
 
 export interface ScanSummary {
@@ -303,6 +324,11 @@ export interface SessionView {
   scan: ScanState;
   apply: ApplyState;
   albums: AlbumFolder[];
+  /**
+   * Groups of albums that look like one release spread over several folders.
+   * Recomputed by the server after scans and merges.
+   */
+  mergeSuggestions: MergeSuggestion[];
 }
 
 export interface FolderListing {

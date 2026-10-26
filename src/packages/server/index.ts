@@ -37,6 +37,15 @@ interface DedupeBody {
   keepPath?: string;
 }
 
+interface DedupeIgnoreBody {
+  path?: string;
+  ignored?: boolean;
+}
+
+interface MergeBody {
+  albumIds?: string[];
+}
+
 interface TestBody {
   token?: string;
 }
@@ -158,6 +167,30 @@ export async function buildServer(options: ServerOptions = {}): Promise<{
       }
       return state.setDedupeKeeper(request.params.id, body.key, body.keepPath);
     },
+  );
+
+  app.post<{ Params: { id: string }; Body: DedupeIgnoreBody }>(
+    "/api/albums/:id/dedupe/ignore",
+    async (request) => {
+      const body = bodyOf<DedupeIgnoreBody>(request);
+      if (typeof body.path !== "string" || body.path.length === 0) {
+        throw new AppError(400, "A file path is required");
+      }
+      return state.setDedupeIgnore(request.params.id, body.path, body.ignored !== false);
+    },
+  );
+
+  app.post<{ Body: MergeBody }>("/api/albums/merge", async (request) => {
+    const body = bodyOf<MergeBody>(request);
+    const albumIds = (Array.isArray(body.albumIds) ? body.albumIds : []).filter(
+      (id): id is string => typeof id === "string" && id.length > 0,
+    );
+    return state.mergeAlbums(albumIds);
+  });
+
+  app.post<{ Params: { id: string } }>(
+    "/api/albums/:id/unmerge",
+    async (request) => state.unmergeAlbum(request.params.id),
   );
 
   app.get<{ Params: { id: string; index: string } }>(

@@ -26,8 +26,12 @@ export in [`stitch_export/`](stitch_export/).
   - manual lookup with separate **artist**, **album**, and **release link** fields
   - per-file → track mapping with confidence suggestions
   - metadata preview, including the effective genre and its source
+  - merging and splitting folders without rescanning the whole library
 - Duplicate detection per folder with automatic quality ranking
   (lossless, bit depth, sample rate, bitrate) and manual keeper override.
+- Album merging: releases split across folders (`Album/CD1`, `Album/CD2`, duplicate rips in
+  other locations) are detected and can be merged into one album before applying. Duplicates
+  are then ranked across every merged folder.
 - Writes tags for MP3, FLAC, M4A/MP4, OGG/Opus, WAV, AIFF, APE, WMA, and more
   (`node-taglib-sharp`).
 - Downloads cover art and either embeds it, saves `cover.*`, or both.
@@ -74,18 +78,23 @@ npm start        # builds UI + bundled server, then serves http://127.0.0.1:4780
    selected release, canonical tracklist, local files, artwork, tag preview, and duplicate
    groups. Map files to tracks directly; auto-mapping is editable. If Discogs has no match,
    the lookup field offers both **Discogs** and **Deezer** searches.
-4. **Dedupe** — files with the same track number/title and a compatible duration are grouped.
+4. **Merge** — a release can be spread over several folders: split by disc
+   (`Album/CD1`, `Album/CD2`), named like parts, or duplicated in another location. The server
+   suggests groups whose artist/album hints match, and the review screen can merge any folders
+   manually. A merged album keeps every file, ranks duplicates across all folders, and applies
+   as one destination album. **Split back into folders** undoes a merge.
+5. **Dedupe** — files with the same track number/title and a compatible duration are grouped.
    The best-quality copy wins. Choose:
    - **off** — leave duplicate copies untouched in the source
    - **hide** — leave losing copies in the source, don't transfer them
    - **delete** — delete losing copies after the keeper is transferred
-5. **Apply** — for every confirmed or auto-matched album:
+6. **Apply** — for every confirmed or auto-matched album:
    - writes canonical tags
    - fetches the cover and embeds and/or saves it
-   - resolves duplicates
+   - resolves duplicates across every merged folder
    - renames folder/tracks from your pattern
    - copies or moves mapped files into the destination
-   - leaves unmatched audio in the source
+   - leaves unmatched audio in the source folder(s)
    - transfers non-audio extras such as cue/log/artwork files
 
 If tagging fails, the operation is rolled back per file: a copy-mode destination copy is
@@ -244,7 +253,7 @@ src/
     deezer/         Deezer manual lookup + genre fallback
     musicbrainz/    MusicBrainz genre fallback
     matching/       similarity scoring, confidence, file→track mapping
-    library/        scanning, dedupe, tag writing, artwork, path planning
+    library/        scanning, album merging, dedupe, tag writing, artwork, path planning
     naming/         pure folder/filename pattern rendering
     model/          shared domain types + genre fallback
     server/         Fastify API, session state, jobs
@@ -278,6 +287,8 @@ See [src/packages/README.md](src/packages/README.md).
 
 - **Tagging failures**: the app removes malformed ID3v2 UFID frames and rolls back failed
   files. Check the album's apply errors; applied albums with errors offer **Retry apply**.
+- **Album split across folders**: merge the folders from the review screen. If a merge was
+  wrong, **Split back into folders** re-scans the sources and restores separate queue entries.
 - **Permissions in Docker**: make sure `PUID`/`PGID` own `config`, `cache`, `music`, and
   `output` on the host.
 

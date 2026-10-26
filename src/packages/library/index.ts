@@ -1,14 +1,22 @@
 export {
   albumIdFor,
+  containerHintsFor,
   enumerateAlbumFolders,
   expandHome,
   folderHasAudio,
   parseFolderName,
   scanAlbumFolder,
 } from "./lib/scan";
-export type { AlbumLocation, ScanOptions } from "./lib/scan";
+export type { AlbumLocation, FolderNameHints, ScanOptions } from "./lib/scan";
 export { applyAlbum } from "./lib/apply";
 export type { ApplyAlbumOptions, CoverArt } from "./lib/apply";
+export {
+  compareAlbumsForMerge,
+  findMergeGroups,
+  mergeAlbumKey,
+  mergeAlbums,
+} from "./lib/merge";
+export type { MergeComparison } from "./lib/merge";
 export {
   chooseKeeper,
   detectDuplicates,

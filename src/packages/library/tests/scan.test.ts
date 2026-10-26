@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { enumerateAlbumFolders, parseFolderName } from "../index";
+import { enumerateAlbumFolders, parseFolderName, scanAlbumFolder } from "../index";
 
 const roots: string[] = [];
 
@@ -75,6 +75,44 @@ describe("enumerateAlbumFolders", () => {
     const root = await tempRoot();
     await mkdir(path.join(root, "Artist", "Empty Album"), { recursive: true });
     expect(await enumerateAlbumFolders(root)).toEqual([]);
+  });
+
+  it("borrows album hints from a container when the album folder is a disc", async () => {
+    const root = await tempRoot();
+    await makeAlbum(path.join(root, "Massive Attack", "Mezzanine", "CD1"));
+    await makeAlbum(path.join(root, "Massive Attack", "Mezzanine", "CD2"));
+
+    const found = await enumerateAlbumFolders(root);
+    expect(found).toHaveLength(2);
+    expect(found.every((location) => location.containerHints?.album === "Mezzanine")).toBe(
+      true,
+    );
+    expect(found.every((location) => location.artistHint === "Massive Attack")).toBe(true);
+  });
+
+  it("does not borrow hints for an album that is not a disc folder", async () => {
+    const root = await tempRoot();
+    await makeAlbum(path.join(root, "Massive Attack", "Mezzanine"));
+
+    const found = await enumerateAlbumFolders(root);
+    expect(found[0]?.containerHints).toBeUndefined();
+  });
+
+  it("uses container hints when scanning a disc folder without tags", async () => {
+    const root = await tempRoot();
+    const disc = path.join(root, "Massive Attack", "Mezzanine", "CD1");
+    await makeAlbum(disc);
+
+    const location = (await enumerateAlbumFolders(root))[0];
+    expect(location).toBeDefined();
+    const album = await scanAlbumFolder(location?.path ?? disc, {
+      artCacheDir: path.join(root, ".art"),
+      artistHint: location?.artistHint,
+      containerHints: location?.containerHints,
+    });
+
+    expect(album.hints.album).toBe("Mezzanine");
+    expect(album.hints.artist).toBe("Massive Attack");
   });
 });
 

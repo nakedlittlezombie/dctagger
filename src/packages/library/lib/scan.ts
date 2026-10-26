@@ -26,13 +26,18 @@ export interface ScanOptions {
   artCacheDir: string;
   /** Container folder name (usually the artist) used as a fallback hint. */
   artistHint?: string;
+  /**
+   * Hints parsed from a container folder when this folder is only a disc/part
+   * of a release (`Artist/Album/CD1`).
+   */
+  containerHints?: FolderNameHints;
 }
 
 export interface AlbumLocation {
   path: string;
   artistHint?: string;
+  containerHints?: FolderNameHints;
 }
-
 const SKIP_DIRECTORIES = new Set([
   "@eadir",
   "#recycle",
@@ -41,6 +46,9 @@ const SKIP_DIRECTORIES = new Set([
   ".dctagger",
   "lost+found",
 ]);
+
+/** A folder that only names the disc/part of a release: "CD1", "Disc 2", "Vol. 3". */
+const DISC_FOLDER = /^(?:cd|disc|disk|dvd|part|pt|vol|volume)[\s._-]*\d{1,2}$/i;
 
 const natural = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
@@ -164,7 +172,7 @@ function modeYear(years: Array<number | undefined>): number | undefined {
   return best;
 }
 
-interface FolderNameHints {
+export interface FolderNameHints {
   artist?: string;
   album?: string;
   year?: number;
@@ -215,6 +223,26 @@ export function parseFolderName(folderName: string): FolderNameHints {
 
   if (name) result.album = name;
   return result;
+}
+
+/**
+ * Hints borrowed from the parent folder when `folderPath` is only a disc/part
+ * of a release (`Artist/Album/CD1`). Returns undefined when the folder is not a
+ * disc marker, when the parent is the artist container, or when the parent is
+ * the scan root itself.
+ */
+export function containerHintsFor(
+  folderPath: string,
+  options: { artistHint?: string; rootFolder?: string } = {},
+): FolderNameHints | undefined {
+  if (!DISC_FOLDER.test(cleanName(path.basename(folderPath)))) return undefined;
+  const parent = path.dirname(folderPath);
+  if (options.rootFolder && path.resolve(parent) === path.resolve(options.rootFolder)) {
+    return undefined;
+  }
+  const parentName = path.basename(parent);
+  if (!parentName || parentName === options.artistHint) return undefined;
+  return parseFolderName(parentName);
 }
 
 async function readImages(
@@ -315,9 +343,16 @@ export async function enumerateAlbumFolders(
     inheritedArtist: string | undefined,
   ): Promise<void> => {
     if (await folderHasAudio(directory)) {
+      // `Artist/Album/CD1` looks like its own album by name, so borrow the
+      // container folder's hints to keep the disc split attributable.
+      const containerHints = containerHintsFor(directory, {
+        artistHint: inheritedArtist,
+        rootFolder: root,
+      });
       results.push({
         path: directory,
         ...(depth > 0 && inheritedArtist ? { artistHint: inheritedArtist } : {}),
+        ...(containerHints ? { containerHints } : {}),
       });
       return;
     }
@@ -383,16 +418,19 @@ export async function scanAlbumFolder(
   const tagAlbum = modeOf(tracks.map((track) => track.album));
   const tagYear = modeYear(tracks.map((track) => track.year));
   const folderHints = parseFolderName(folderName);
+  const container = options.containerHints;
   const containerArtist = options.artistHint;
 
-  const rawArtist = tagArtist ?? folderHints.artist ?? containerArtist;
+  const rawArtist =
+    tagArtist ?? folderHints.artist ?? container?.artist ?? containerArtist;
   const artist = rawArtist ? cleanArtistName(rawArtist) : undefined;
-  const album = tagAlbum ?? folderHints.album;
-  const year = tagYear ?? folderHints.year;
+  const album = tagAlbum ?? container?.album ?? folderHints.album;
+  const year = tagYear ?? container?.year ?? folderHints.year;
   const genres = normalizeGenres(tracks.flatMap((track) => track.genres ?? []));
   const usedFolder =
-    (!tagArtist && Boolean(folderHints.artist || containerArtist)) ||
-    (!tagAlbum && Boolean(folderHints.album));
+    (!tagArtist &&
+      Boolean(folderHints.artist || container?.artist || containerArtist)) ||
+    (!tagAlbum && Boolean(folderHints.album || container?.album));
   const hints: AlbumHints = {
     artist,
     album,

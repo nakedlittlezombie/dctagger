@@ -4,12 +4,18 @@ import { autoMap } from "../../packages/matching";
 import type {
   AlbumFolder,
   MatchCandidate,
+  MergeSuggestion,
   PublicSettings,
   ReleaseTrack,
 } from "../../packages/model/types";
 import { releaseGenres } from "../../packages/model/genre";
+import { applyDedupeIgnores } from "../../packages/model/dedupe";
 import { api, artUrl, imageUrl } from "../api-client";
+import type { QueueOptions } from "../album-queue";
 import { Lightbox } from "../components/Lightbox";
+import { FolderTracks } from "../components/FolderTracks";
+import { MergePicker } from "../components/MergePicker";
+import { QueueToolbar } from "../components/QueueToolbar";
 import { StatusChip } from "../components/StatusChip";
 
 function trackLabel(track: ReleaseTrack): string {
@@ -25,7 +31,7 @@ function autoMappingFor(
     (entry) => entry.release.id === releaseId,
   ) ?? album.candidates[0] ?? album.deezerCandidates[0];
   const losers = new Set(
-    album.duplicates.flatMap((group) =>
+    applyDedupeIgnores(album.duplicates, album.dedupeIgnores).flatMap((group) =>
       group.members.filter((member) => member.path !== group.keep).map((member) => member.path),
     ),
   );
@@ -59,21 +65,39 @@ function formatBytes(bytes: number): string {
 
 interface ReviewViewProps {
   album: AlbumFolder;
+  /** Every scanned album, used for the filter counts in the queue toolbar. */
+  albums: AlbumFolder[];
+  /** Server-computed groups that look like the same release. */
+  mergeSuggestions: MergeSuggestion[];
   settings: PublicSettings;
   position?: { index: number; total: number };
+  queueOptions: QueueOptions;
+  onQueueOptionsChange: (patch: Partial<QueueOptions>) => void;
+  onPrev: () => void;
+  onNext: () => void;
   onChanged: (album: AlbumFolder) => void;
   onAdvance: () => void;
   onBack: () => void;
+  onMerge: (albumIds: string[]) => Promise<void>;
+  onUnmerge: (albumId: string) => Promise<void>;
   onNotify: (message: string, kind?: "error" | "success") => void;
 }
 
 export function ReviewView({
   album,
+  albums,
+  mergeSuggestions,
   settings,
   position,
+  queueOptions,
+  onQueueOptionsChange,
+  onPrev,
+  onNext,
   onChanged,
   onAdvance,
   onBack,
+  onMerge,
+  onUnmerge,
   onNotify,
 }: ReviewViewProps) {
   const [selectedId, setSelectedId] = useState<number | undefined>(
@@ -89,6 +113,11 @@ export function ReviewView({
   const [linkQuery, setLinkQuery] = useState("");
   const [working, setWorking] = useState(false);
   const [dedupeWorking, setDedupeWorking] = useState<string | null>(null);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(() => new Set());
+  const [expandedMergeSuggestions, setExpandedMergeSuggestions] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [deezerLoading, setDeezerLoading] = useState(false);
   const [deezerError, setDeezerError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; caption?: string } | null>(null);
@@ -134,20 +163,43 @@ export function ReviewView({
     (entry) => entry.release.id === selectedId,
   ) ?? album.candidates[0] ?? album.deezerCandidates[0];
   const release = selected?.release;
+  const duplicateGroups = useMemo(
+    () => applyDedupeIgnores(album.duplicates, album.dedupeIgnores),
+    [album.duplicates, album.dedupeIgnores],
+  );
+  const ignoredDuplicates = useMemo(() => {
+    const tracked = new Set(album.dedupeIgnores ?? []);
+    return album.tracks.filter((track) => tracked.has(track.path));
+  }, [album.dedupeIgnores, album.tracks]);
   const losers = useMemo(
     () =>
       new Set(
-        album.duplicates.flatMap((group) =>
+        duplicateGroups.flatMap((group) =>
           group.members
             .filter((member) => member.path !== group.keep)
             .map((member) => member.path),
         ),
       ),
-    [album.duplicates],
+    [duplicateGroups],
   );
   const keptTracks = album.tracks.filter((track) => !losers.has(track.path));
   const assignedCount = keptTracks.filter((track) => mapping[track.path] !== null).length;
   const unmapped = keptTracks.filter((track) => mapping[track.path] === null).length;
+  const sourceFolders = album.sourceFolders?.length
+    ? album.sourceFolders
+    : [album.path];
+  const albumMergeSuggestions = useMemo(
+    () =>
+      mergeSuggestions.filter(
+        (suggestion) =>
+          suggestion.albumIds.includes(album.id) &&
+          suggestion.albumIds.every((id) => {
+            const entry = albums.find((candidate) => candidate.id === id);
+            return entry !== undefined && entry.status !== "applied";
+          }),
+      ),
+    [mergeSuggestions, albums, album.id],
+  );
 
   const suggestions = useMemo(() => {
     if (!release) return new Map<string, number>();
@@ -371,6 +423,63 @@ export function ReviewView({
     }
   };
 
+  /** Merge another folder into the album on screen so it keeps focus. */
+  const mergeIntoThis = async (albumIds: string[]) => {
+    setWorking(true);
+    try {
+      await onMerge([album.id, ...albumIds.filter((id) => id !== album.id)]);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const splitFolders = async () => {
+    setWorking(true);
+    try {
+      await onUnmerge(album.id);
+    } catch {
+      // The app already surfaced the error in a toast.
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const toggleSource = (folder: string) => {
+    setExpandedSources((current) => {
+      const next = new Set(current);
+      if (next.has(folder)) next.delete(folder);
+      else next.add(folder);
+      return next;
+    });
+  };
+
+  const toggleMergeSuggestion = (key: string) => {
+    setExpandedMergeSuggestions((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const setDuplicateIgnore = async (filePath: string, ignored = true) => {
+    setDedupeWorking(filePath);
+    try {
+      const updated = await api.setDedupeIgnore(album.id, filePath, ignored);
+      onChanged(updated);
+      onNotify(
+        ignored
+          ? "File kept as a separate track. Assign it to a track in the file list."
+          : "File is checked for duplicates again.",
+        "success",
+      );
+    } catch (cause) {
+      onNotify(cause instanceof Error ? cause.message : String(cause), "error");
+    } finally {
+      setDedupeWorking(null);
+    }
+  };
+
   const applied = album.status === "applied";
   const assignedFilesByTrack = useMemo(() => {
     const map = new Map<number, string[]>();
@@ -434,6 +543,8 @@ export function ReviewView({
   const confidenceValue = selected?.score ?? album.confidence ?? 0;
   const confidenceClass =
     confidenceValue >= 0.9 ? "high" : confidenceValue >= 0.6 ? "medium" : "low";
+  const canPrev = position ? position.index > 1 : false;
+  const canNext = position ? position.index < position.total : false;
 
   return (
     <div className="view review-view">
@@ -442,8 +553,26 @@ export function ReviewView({
           ← Library roots
         </button>
         <span className="review-crumb mono">/ MATCH GRID / ALBUM RESOLUTION</span>
-        <div className="review-position">
-          {position ? `STAGE ${position.index} / ${position.total}` : "ALBUM REVIEW"}
+        <div className="queue-steps">
+          <button
+            className="button ghost small"
+            disabled={!canPrev}
+            title="Previous album in the queue"
+            onClick={onPrev}
+          >
+            ← Prev
+          </button>
+          <span className="review-position">
+            {position ? `STAGE ${position.index} / ${position.total}` : "ALBUM REVIEW"}
+          </span>
+          <button
+            className="button ghost small"
+            disabled={!canNext}
+            title="Next album in the queue"
+            onClick={onNext}
+          >
+            Next →
+          </button>
         </div>
         <div className="review-actions-top">
           {applied ? (
@@ -454,6 +583,13 @@ export function ReviewView({
             </button>
           ) : (
             <>
+              <button
+                className="button ghost small"
+                disabled={working}
+                onClick={() => setMergeOpen(true)}
+              >
+                Merge folders
+              </button>
               <button className="button ghost small" disabled={working} onClick={() => void skip()}>
                 Skip album
               </button>
@@ -469,6 +605,15 @@ export function ReviewView({
         </div>
       </div>
 
+      <div className="review-queue-controls">
+        <QueueToolbar
+          albums={albums}
+          options={queueOptions}
+          onChange={onQueueOptionsChange}
+          summary={position ? `${position.total} in queue` : undefined}
+        />
+      </div>
+
       <div className="review-header panel">
         <div className="review-album-info">
           <div className="eyebrow">Album folder</div>
@@ -477,9 +622,14 @@ export function ReviewView({
             <StatusChip status={album.status} confidence={album.confidence} />
             <span>{album.tracks.length} files</span>
             {release && <span>{release.tracklist.length} Discogs tracks</span>}
-            {album.duplicates.length > 0 && (
+            {duplicateGroups.length > 0 && (
               <span className="warn-text">
-                {album.duplicates.length} duplicate group{album.duplicates.length === 1 ? "" : "s"}
+                {duplicateGroups.length} duplicate group{duplicateGroups.length === 1 ? "" : "s"}
+              </span>
+            )}
+            {sourceFolders.length > 1 && (
+              <span className="chip merge-chip">
+                {sourceFolders.length} folders merged
               </span>
             )}
           </div>
@@ -799,7 +949,17 @@ export function ReviewView({
                       )}
                     </div>
                     {isLoser ? (
-                      <span className="muted small dedupe-note">NOT TAGGED</span>
+                      <div className="file-map-controls">
+                        <span className="muted small dedupe-note">NOT TAGGED</span>
+                        <button
+                          className="button ghost small"
+                          disabled={dedupeWorking !== null || applied}
+                          title="This file is not a duplicate — keep it as its own track so it can be mapped, tagged, and transferred"
+                          onClick={() => void setDuplicateIgnore(track.path, true)}
+                        >
+                          {dedupeWorking === track.path ? "Saving…" : "Not a duplicate"}
+                        </button>
+                      </div>
                     ) : (
                       <div className="file-map-controls">
                         {suggestion !== undefined && suggestion > 0 && assigned !== null && (
@@ -892,6 +1052,128 @@ export function ReviewView({
             )}
           </section>
 
+          <section className="panel merge-panel">
+            <div className="section-heading tight">
+              <div>
+                <div className="eyebrow">Album assembly</div>
+                <h2>Folder merge</h2>
+              </div>
+              <span className="chip">
+                {sourceFolders.length} folder{sourceFolders.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <p className="muted tiny">
+              {sourceFolders.length > 1
+                ? "Every folder below is matched and saved as one album. Duplicates are detected across all of them."
+                : "Merging combines folders that hold this same album — another rip, or another disc of the set — so they save as one album."}
+            </p>
+            <ul className="merge-source-list">
+              {sourceFolders.map((folder) => {
+                const open = expandedSources.has(folder);
+                return (
+                  <li key={folder} className="merge-source">
+                    <div className="merge-source-head">
+                      <span className="ellipsis mono tiny" title={folder}>
+                        {folder}
+                      </span>
+                      {folder === album.path && (
+                        <span className="chip">primary</span>
+                      )}
+                      <button
+                        className="link-button"
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => toggleSource(folder)}
+                      >
+                        {open ? "Hide tracks" : "Show tracks"}
+                      </button>
+                    </div>
+                    {open && <FolderTracks album={album} folder={folder} />}
+                  </li>
+                );
+              })}
+            </ul>
+            {albumMergeSuggestions.length > 0 && !applied && (
+              <div className="merge-suggested">
+                <span className="muted tiny">Looks like the same release:</span>
+                {albumMergeSuggestions.map((suggestion) => {
+                  const key = suggestion.albumIds.join(":");
+                  const open = expandedMergeSuggestions.has(key);
+                  const partners = suggestion.albumIds
+                    .filter((id) => id !== album.id)
+                    .map((id) => albums.find((entry) => entry.id === id))
+                    .filter((entry): entry is AlbumFolder => entry !== undefined);
+                  return (
+                    <div key={key} className="merge-suggestion-block">
+                      <div className="merge-suggestion">
+                        <div className="merge-suggestion-copy">
+                          <strong className="ellipsis">
+                            {partners.map((entry) => entry.folderName).join(" + ")}
+                          </strong>
+                          <span className="muted tiny">{suggestion.reason}</span>
+                        </div>
+                        <div className="merge-suggestion-actions">
+                          <button
+                            className="link-button"
+                            type="button"
+                            aria-expanded={open}
+                            onClick={() => toggleMergeSuggestion(key)}
+                          >
+                            {open ? "Hide tracks" : "Show tracks"}
+                          </button>
+                          <button
+                            className="button small"
+                            disabled={working}
+                            onClick={() => void mergeIntoThis(suggestion.albumIds).catch(() => undefined)}
+                          >
+                            Merge
+                          </button>
+                        </div>
+                      </div>
+                      {open && (
+                        <div className="merge-suggestion-tracks">
+                          {partners.map((entry) => (
+                            <div key={entry.id} className="merge-folder-tracks">
+                              <div className="merge-folder-head">
+                                <span className="ellipsis mono tiny" title={entry.path}>
+                                  {entry.folderName}
+                                </span>
+                                <span className="chip">
+                                  {entry.tracks.length} file{entry.tracks.length === 1 ? "" : "s"}
+                                </span>
+                              </div>
+                              <FolderTracks album={entry} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {!applied && (
+              <div className="merge-actions">
+                <button
+                  className="button ghost small"
+                  disabled={working}
+                  onClick={() => setMergeOpen(true)}
+                >
+                  Merge folders…
+                </button>
+                {sourceFolders.length > 1 && (
+                  <button
+                    className="button ghost small"
+                    disabled={working}
+                    onClick={() => void splitFolders()}
+                  >
+                    Split back into {sourceFolders.length} folders
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+
           <section className="panel inspector-panel">
             <div className="section-heading tight">
               <div>
@@ -951,14 +1233,14 @@ export function ReviewView({
             )}
           </section>
 
-          {album.duplicates.length > 0 && (
+          {(duplicateGroups.length > 0 || ignoredDuplicates.length > 0) && (
             <section className="panel dedupe-panel">
               <div className="section-heading tight">
                 <div>
                   <div className="eyebrow">Quality control</div>
                   <h2>Duplicate files</h2>
                 </div>
-                <span className="chip">{album.duplicates.length}</span>
+                <span className="chip">{duplicateGroups.length}</span>
               </div>
               <p className="muted tiny dedupe-intro">
                 {settings.dedupeMode === "off"
@@ -966,10 +1248,11 @@ export function ReviewView({
                   : settings.dedupeMode === "hide"
                     ? "Losing copies stay in the source folder, not transferred."
                     : "Losing copies are deleted after the keeper is transferred."}{" "}
-                Choosing a keeper remaps the album.
+                Choosing a keeper remaps the album. Use “Not a duplicate” on a file to keep it as
+                its own track.
               </p>
               <div className="dedupe-groups">
-                {album.duplicates.map((group) => (
+                {duplicateGroups.map((group) => (
                   <div key={group.key} className="dedupe-group">
                     <div className="dedupe-group-head">
                       <strong>{group.reason}</strong>
@@ -996,6 +1279,25 @@ export function ReviewView({
                   </div>
                 ))}
               </div>
+              {ignoredDuplicates.length > 0 && (
+                <div className="dedupe-ignored">
+                  <div className="eyebrow">Kept as separate tracks</div>
+                  {ignoredDuplicates.map((track) => (
+                    <div key={track.path} className="dedupe-ignored-row">
+                      <span className="dedupe-file ellipsis" title={track.fileName}>
+                        {track.fileName}
+                      </span>
+                      <button
+                        className="link-button"
+                        disabled={dedupeWorking !== null || applied}
+                        onClick={() => void setDuplicateIgnore(track.path, false)}
+                      >
+                        Check again
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
         </aside>
@@ -1007,9 +1309,9 @@ export function ReviewView({
             ? `STAGE: ${isDeezer ? "DEEZER" : "DISCOGS"} RELEASE ${releaseIdLabel} · ${assignedCount}/${keptTracks.length} FILES LINKED`
             : "STAGE: AWAITING RELEASE SELECTION"}
           {unmapped > 0 && <span className="warn-text"> · {unmapped} UNMAPPED</span>}
-          {album.duplicates.length > 0 && (
+          {duplicateGroups.length > 0 && (
             <span className="muted">
-              {" "}· {album.duplicates.length} DUPLICATE{album.duplicates.length === 1 ? "" : "S"}
+              {" "}· {duplicateGroups.length} DUPLICATE{duplicateGroups.length === 1 ? "" : "S"}
             </span>
           )}
           {missingCount > 0 && (
@@ -1035,6 +1337,16 @@ export function ReviewView({
           )}
         </div>
       </div>
+
+      {mergeOpen && (
+        <MergePicker
+          album={album}
+          albums={albums}
+          suggestions={mergeSuggestions}
+          onMerge={mergeIntoThis}
+          onClose={() => setMergeOpen(false)}
+        />
+      )}
 
       {lightbox && (
         <Lightbox src={lightbox.src} caption={lightbox.caption} onClose={() => setLightbox(null)} />

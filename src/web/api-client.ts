@@ -89,6 +89,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ key, keepPath }),
     }),
+  setDedupeIgnore: (albumId: string, path: string, ignored = true) =>
+    request<AlbumFolder>(`/api/albums/${albumId}/dedupe/ignore`, {
+      method: "POST",
+      body: JSON.stringify({ path, ignored }),
+    }),
+  mergeAlbums: (albumIds: string[]) =>
+    request<SessionView>("/api/albums/merge", {
+      method: "POST",
+      body: JSON.stringify({ albumIds }),
+    }),
+  unmergeAlbum: (albumId: string) =>
+    request<SessionView>(`/api/albums/${albumId}/unmerge`, { method: "POST" }),
   apply: () => request<SessionView>("/api/apply", { method: "POST" }),
   cancelApply: () =>
     request<SessionView>("/api/apply/cancel", { method: "POST" }),

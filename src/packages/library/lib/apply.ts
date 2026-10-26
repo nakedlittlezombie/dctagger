@@ -24,6 +24,7 @@ import type {
 import { cleanArtistName } from "../../model/artist";
 import { releaseGenres } from "../../model/genre";
 import { renderFileName, renderFolderPath, type NamingContext } from "../../naming";
+import { applyDedupeIgnores } from "../../model/dedupe";
 import { detectDuplicates, duplicatePaths } from "./dedupe";
 import { isAudioFile } from "./files";
 
@@ -235,28 +236,31 @@ function coverFileName(cover: CoverArt): string {
 export async function applyAlbum(options: ApplyAlbumOptions): Promise<ApplyResult> {
   const { album, release, settings, destinationRoot, cover } = options;
   const errors: string[] = [];
-  const source = album.path;
+  const sourceFolders = album.sourceFolders?.length ? album.sourceFolders : [album.path];
   let tagged = 0;
   let transferred = 0;
   let skipped = 0;
 
-  const sourceInfo = await stat(source).catch(() => null);
-  if (!sourceInfo?.isDirectory()) {
-    return {
-      albumId: album.id,
-      folderName: album.folderName,
-      ok: false,
-      tagged: 0,
-      files: 0,
-      deduplicated: 0,
-      skipped: 0,
-      errors: [`Source folder not found: ${source}`],
-    };
+  for (const sourceFolder of sourceFolders) {
+    const sourceInfo = await stat(sourceFolder).catch(() => null);
+    if (!sourceInfo?.isDirectory()) {
+      return {
+        albumId: album.id,
+        folderName: album.folderName,
+        ok: false,
+        tagged: 0,
+        files: 0,
+        deduplicated: 0,
+        skipped: 0,
+        errors: [`Source folder not found: ${sourceFolder}`],
+      };
+    }
   }
 
-  const groups = album.duplicates.length > 0
-    ? album.duplicates
-    : detectDuplicates(album.tracks);
+  const groups = applyDedupeIgnores(
+    album.duplicates.length > 0 ? album.duplicates : detectDuplicates(album.tracks),
+    album.dedupeIgnores,
+  );
   const losers = duplicatePaths(groups);
   const dedupeActive = settings.dedupeMode !== "off";
   const hidden = dedupeActive ? losers : new Set<string>();
@@ -318,19 +322,18 @@ export async function applyAlbum(options: ApplyAlbumOptions): Promise<ApplyResul
     }
   }
 
-  const entries = await readdir(source, { withFileTypes: true });
-  const files = entries
-    .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
-    .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b));
   const successful = new Set<string>();
   const replacedArtwork: string[] = [];
 
-  for (const fileName of files) {
-    const filePath = path.join(source, fileName);
+  /**
+   * Handle one entry from one source folder. A merged album can draw files
+   * from several folders, so the source folder travels with the file name.
+   */
+  const processFile = async (sourceFolder: string, fileName: string): Promise<void> => {
+    const filePath = path.join(sourceFolder, fileName);
     if (hidden.has(filePath)) {
       deduplicated += 1;
-      continue;
+      return;
     }
 
     if (isAudioFile(fileName)) {
@@ -343,7 +346,7 @@ export async function applyAlbum(options: ApplyAlbumOptions): Promise<ApplyResul
         // folder (copy mode) or is left behind (move mode) so it can be
         // reviewed instead of being silently copied/tagged.
         skipped += 1;
-        continue;
+        return;
       }
       const local = localByPath.get(filePath);
       const context = contextFor(
@@ -401,7 +404,7 @@ export async function applyAlbum(options: ApplyAlbumOptions): Promise<ApplyResul
       } catch (error) {
         errors.push(`Could not transfer ${fileName}: ${(error as Error).message}`);
       }
-      continue;
+      return;
     }
 
     // Non-audio extras (cue, log, artwork, …).
@@ -409,7 +412,7 @@ export async function applyAlbum(options: ApplyAlbumOptions): Promise<ApplyResul
       // The new cover replaces this one. In copy mode the source stays intact;
       // in move mode it has to go for the source folder to empty out.
       replacedArtwork.push(filePath);
-      continue;
+      return;
     }
     const baseName = path.basename(fileName, path.extname(fileName));
     const destination = await uniquePath(
@@ -424,6 +427,23 @@ export async function applyAlbum(options: ApplyAlbumOptions): Promise<ApplyResul
       successful.add(filePath);
     } catch (error) {
       errors.push(`Could not transfer ${fileName}: ${(error as Error).message}`);
+    }
+  };
+
+  for (const sourceFolder of sourceFolders) {
+    let files: string[] = [];
+    try {
+      const entries = await readdir(sourceFolder, { withFileTypes: true });
+      files = entries
+        .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
+        .map((entry) => entry.name)
+        .sort((a, b) => a.localeCompare(b));
+    } catch (error) {
+      errors.push(`Could not read ${sourceFolder}: ${(error as Error).message}`);
+      continue;
+    }
+    for (const fileName of files) {
+      await processFile(sourceFolder, fileName);
     }
   }
 
@@ -462,7 +482,9 @@ export async function applyAlbum(options: ApplyAlbumOptions): Promise<ApplyResul
         }
       }
     }
-    await rmdir(source).catch(() => undefined);
+    for (const sourceFolder of sourceFolders) {
+      await rmdir(sourceFolder).catch(() => undefined);
+    }
   }
 
   return {

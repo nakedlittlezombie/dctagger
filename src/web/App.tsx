@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AlbumFolder, PublicSettings, SessionView } from "../packages/model/types";
+import {
+  DEFAULT_QUEUE_OPTIONS,
+  applyQueueOptions,
+  isReviewAlbum,
+  loadQueueOptions,
+  neighborInQueue,
+  queueIndex,
+  saveQueueOptions,
+  type QueueOptions,
+} from "./album-queue";
 import { api } from "./api-client";
 import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
@@ -15,8 +25,6 @@ interface Toast {
   message: string;
   kind: "error" | "success";
 }
-
-const REVIEW_STATUSES = new Set(["needs-review", "error"]);
 
 function viewFromHash(): { view: View; reviewId: string | null } {
   const hash = window.location.hash.replace(/^#\/?/, "");
@@ -38,6 +46,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [queueOptions, setQueueOptions] = useState<QueueOptions>(() => loadQueueOptions());
   const previousScanPhase = useRef<string | null>(null);
 
   const notify = useCallback((message: string, kind: "error" | "success" = "success") => {
@@ -90,9 +99,16 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const reviewQueue = session
-    ? session.albums.filter((album) => REVIEW_STATUSES.has(album.status))
-    : [];
+  useEffect(() => {
+    saveQueueOptions(queueOptions);
+  }, [queueOptions]);
+
+  const albums = session?.albums;
+  const queue = useMemo(
+    () => applyQueueOptions(albums ?? [], queueOptions),
+    [albums, queueOptions],
+  );
+  const reviewQueue = useMemo(() => queue.filter(isReviewAlbum), [queue]);
 
   // When a scan finishes with work to do, open the first album automatically.
   useEffect(() => {
@@ -101,13 +117,13 @@ export default function App() {
     const previous = previousScanPhase.current;
     previousScanPhase.current = phase;
     if (previous === "scanning" && phase === "done") {
-      const first = session?.albums.find((album) => REVIEW_STATUSES.has(album.status));
+      const first = reviewQueue[0];
       if (first) {
         setReviewId(first.id);
         setView("review");
       }
     }
-  }, [session?.scan.phase, session?.albums]);
+  }, [session?.scan.phase, reviewQueue]);
 
   const updateAlbum = (album: AlbumFolder) => {
     setSession((current) =>
@@ -121,14 +137,92 @@ export default function App() {
     void refresh(true);
   };
 
+  const openAlbum = useCallback((albumId: string) => {
+    setReviewId(albumId);
+    setView("review");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  /** Fold several scanned folders into one album and open it for review. */
+  const mergeFolders = useCallback(
+    async (albumIds: string[]) => {
+      setBusy(true);
+      try {
+        const next = await api.mergeAlbums(albumIds);
+        setSession(next);
+        const target = next.albums.find((album) => album.id === albumIds[0]);
+        if (target) openAlbum(target.id);
+        notify(
+          `Merged ${albumIds.length} folders into one album. Review the match, then confirm.`,
+        );
+      } catch (cause) {
+        notify(cause instanceof Error ? cause.message : String(cause), "error");
+        throw cause;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [notify, openAlbum],
+  );
+
+  /** Put a merged album's folders back as separate queue entries. */
+  const unmergeFolders = useCallback(
+    async (albumId: string) => {
+      setBusy(true);
+      try {
+        const next = await api.unmergeAlbum(albumId);
+        setSession(next);
+        const target = next.albums.find((album) => album.id === albumId);
+        if (target) {
+          openAlbum(target.id);
+        } else {
+          setReviewId(null);
+          setView("library");
+        }
+        notify("Split the merged album back into its folders.");
+      } catch (cause) {
+        notify(cause instanceof Error ? cause.message : String(cause), "error");
+        throw cause;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [notify, openAlbum],
+  );
+
+  /**
+   * Change the shared queue options. If the album on screen falls outside the
+   * new queue, step to the first album that is still in it.
+   */
+  const updateQueueOptions = (patch: Partial<QueueOptions>) => {
+    const next = { ...queueOptions, ...patch };
+    setQueueOptions(next);
+    if (view !== "review" || !reviewId) return;
+    const nextQueue = applyQueueOptions(albums ?? [], next);
+    if (!nextQueue.some((album) => album.id === reviewId)) {
+      setReviewId(nextQueue[0]?.id ?? null);
+    }
+  };
+
+  const resetQueueOptions = () => {
+    const next = { ...DEFAULT_QUEUE_OPTIONS };
+    setQueueOptions(next);
+    const first = applyQueueOptions(albums ?? [], next)[0];
+    if (first) setReviewId(first.id);
+  };
+
   const advance = async () => {
+    const preferredId = neighborInQueue(queue, reviewId)?.id;
     try {
       const next = await api.session();
       setSession(next);
-      const first = next.albums.find((album) => REVIEW_STATUSES.has(album.status));
-      if (first) {
-        setReviewId(first.id);
-        setView("review");
+      const nextQueue = applyQueueOptions(next.albums, queueOptions);
+      const target =
+        nextQueue.find((album) => album.id === preferredId) ??
+        nextQueue.find(isReviewAlbum) ??
+        nextQueue[0];
+      if (target) {
+        openAlbum(target.id);
       } else {
         setReviewId(null);
         setView("library");
@@ -136,6 +230,23 @@ export default function App() {
     } catch {
       setView("library");
     }
+  };
+
+  const stepQueue = (direction: -1 | 1) => {
+    const index = queueIndex(queue, reviewId);
+    const target = index === -1 ? undefined : queue[index + direction];
+    if (target) openAlbum(target.id);
+  };
+
+  const startReviewAll = () => {
+    const next = { ...queueOptions, filter: "review" as const };
+    const first = applyQueueOptions(albums ?? [], next)[0];
+    if (!first) {
+      notify("No albums match the current queue filters.", "error");
+      return;
+    }
+    setQueueOptions(next);
+    openAlbum(first.id);
   };
 
   const scan = async (rootFolder: string) => {
@@ -197,13 +308,15 @@ export default function App() {
   };
 
   const openReviewQueue = () => {
-    const first = session?.albums.find((album) => REVIEW_STATUSES.has(album.status));
-    if (first) {
-      setReviewId(first.id);
-      setView("review");
+    const target =
+      queue.find((album) => album.id === reviewId) ??
+      reviewQueue[0] ??
+      queue[0];
+    if (target) {
+      openAlbum(target.id);
     } else {
       setView("library");
-      notify("No albums are waiting for manual review.", "success");
+      notify("No albums match the current queue filters.", "success");
     }
   };
 
@@ -233,15 +346,13 @@ export default function App() {
   const currentAlbum = reviewId
     ? session.albums.find((album) => album.id === reviewId)
     : undefined;
-  const queueIndex = currentAlbum
-    ? reviewQueue.findIndex((album) => album.id === currentAlbum.id)
-    : -1;
+  const currentQueueIndex = currentAlbum ? queueIndex(queue, currentAlbum.id) : -1;
   const position =
-    queueIndex >= 0
-      ? { index: queueIndex + 1, total: reviewQueue.length }
+    currentQueueIndex >= 0
+      ? { index: currentQueueIndex + 1, total: queue.length }
       : undefined;
 
-  const needsReview = session.albums.filter((album) => REVIEW_STATUSES.has(album.status)).length;
+  const needsReview = session.albums.filter((album) => isReviewAlbum(album)).length;
   const pendingApply = session.albums.filter(
     (album) => album.status === "auto-matched" || album.status === "confirmed",
   ).length;
@@ -273,20 +384,14 @@ export default function App() {
               session={session}
               settings={settings}
               busy={busy}
+              queueOptions={queueOptions}
+              onQueueOptionsChange={updateQueueOptions}
               onScan={(root) => void scan(root)}
               onCancelScan={() => void cancelScan()}
               onReset={() => void reset()}
-              onReview={(albumId) => {
-                setReviewId(albumId);
-                setView("review");
-              }}
-              onReviewAll={() => {
-                const first = reviewQueue[0];
-                if (first) {
-                  setReviewId(first.id);
-                  setView("review");
-                }
-              }}
+              onReview={(albumId) => openAlbum(albumId)}
+              onReviewAll={startReviewAll}
+              onMerge={(albumIds) => void mergeFolders(albumIds).catch(() => undefined)}
               onApply={() => setView("apply")}
               onSettings={() => setView("settings")}
             />
@@ -295,11 +400,19 @@ export default function App() {
           {view === "review" && currentAlbum && (
             <ReviewView
               album={currentAlbum}
+              albums={session.albums}
+              mergeSuggestions={session.mergeSuggestions}
               settings={settings}
               position={position}
+              queueOptions={queueOptions}
+              onQueueOptionsChange={updateQueueOptions}
+              onPrev={() => stepQueue(-1)}
+              onNext={() => stepQueue(1)}
               onChanged={updateAlbum}
               onAdvance={() => void advance()}
               onBack={() => setView("library")}
+              onMerge={mergeFolders}
+              onUnmerge={unmergeFolders}
               onNotify={notify}
             />
           )}
@@ -307,8 +420,17 @@ export default function App() {
           {view === "review" && !currentAlbum && (
             <div className="view">
               <div className="banner warn">
-                <span>That album is no longer in this scan.</span>
-                <button className="button small" onClick={() => setView("library")}>
+                <span>
+                  {session.albums.length === 0
+                    ? "Scan a library folder to build the match queue."
+                    : "No albums match the current queue filters, or that album is no longer in this scan."}
+                </span>
+                {session.albums.length > 0 && (
+                  <button className="button small" onClick={resetQueueOptions}>
+                    Show all albums
+                  </button>
+                )}
+                <button className="button small ghost" onClick={() => setView("library")}>
                   Back to library
                 </button>
               </div>
@@ -323,10 +445,7 @@ export default function App() {
               onStart={() => void startApply()}
               onCancel={() => void cancelApply()}
               onBack={() => setView("library")}
-              onReview={(albumId) => {
-                setReviewId(albumId);
-                setView("review");
-              }}
+              onReview={(albumId) => openAlbum(albumId)}
             />
           )}
 

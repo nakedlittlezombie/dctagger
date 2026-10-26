@@ -14,3 +14,9 @@ export {
   similarity,
   trackSimilarity,
 } from "./lib/similarity";
+export {
+  canMergeAlbums,
+  compareAlbumsForMerge,
+  mergeAlbumKey,
+} from "./lib/merge";
+export type { MergeComparison } from "./lib/merge";

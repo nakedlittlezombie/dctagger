@@ -1,51 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { AlbumFolder, AlbumStatus, PublicSettings, SessionView } from "../../packages/model/types";
+import type { AlbumStatus, PublicSettings, SessionView } from "../../packages/model/types";
+import { applyDedupeIgnores } from "../../packages/model/dedupe";
+import { applyQueueOptions, type QueueOptions } from "../album-queue";
 import { missingTrackCount } from "../album-stats";
 import { AlbumThumb } from "../components/AlbumThumb";
 import { FolderPicker } from "../components/FolderPicker";
+import { FolderTracks } from "../components/FolderTracks";
 import { ProgressBar } from "../components/ProgressBar";
+import { QueueToolbar } from "../components/QueueToolbar";
 import { StatusChip } from "../components/StatusChip";
 
 import { artUrl } from "../api-client";
-
-type Filter = "all" | "review" | "auto" | "confirmed" | "applied" | "skipped";
-
-type Sort = "scan" | "tracks-desc" | "tracks-asc";
-
-const SORTS: Array<{ id: Sort; label: string }> = [
-  { id: "scan", label: "Scan order" },
-  { id: "tracks-desc", label: "Tracks: most first" },
-  { id: "tracks-asc", label: "Tracks: fewest first" },
-];
-
-const FILTERS: Array<{ id: Filter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "review", label: "Needs review" },
-  { id: "auto", label: "Auto-matched" },
-  { id: "confirmed", label: "Confirmed" },
-  { id: "applied", label: "Applied" },
-  { id: "skipped", label: "Skipped" },
-];
-
-function matchesFilter(album: AlbumFolder, filter: Filter): boolean {
-  if (filter === "all") return true;
-  if (filter === "review") return album.status === "needs-review" || album.status === "error";
-  if (filter === "auto") return album.status === "auto-matched";
-  if (filter === "confirmed") return album.status === "confirmed";
-  if (filter === "applied") return album.status === "applied";
-  return album.status === "skipped";
-}
 
 interface LibraryViewProps {
   session: SessionView;
   settings: PublicSettings;
   busy: boolean;
+  queueOptions: QueueOptions;
+  onQueueOptionsChange: (patch: Partial<QueueOptions>) => void;
   onScan: (rootFolder: string) => void;
   onCancelScan: () => void;
   onReset: () => void;
   onReview: (albumId: string) => void;
   onReviewAll: () => void;
+  onMerge: (albumIds: string[]) => void;
   onApply: () => void;
   onSettings: () => void;
 }
@@ -54,28 +33,36 @@ export function LibraryView({
   session,
   settings,
   busy,
+  queueOptions,
+  onQueueOptionsChange,
   onScan,
   onCancelScan,
   onReset,
   onReview,
   onReviewAll,
+  onMerge,
   onApply,
   onSettings,
 }: LibraryViewProps) {
   const [root, setRoot] = useState(settings.rootFolder || session.scan.rootFolder || "");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [hideMissing, setHideMissing] = useState(false);
-  const [sort, setSort] = useState<Sort>("scan");
-  const [query, setQuery] = useState("");
+  const [expandedMerges, setExpandedMerges] = useState<Set<string>>(() => new Set());
+
+  const toggleMergeExpanded = (key: string) => {
+    setExpandedMerges((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!root) setRoot(settings.rootFolder || session.scan.rootFolder || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.rootFolder, session.scan.rootFolder]);
 
-  const { scan, albums } = session;
-  const summary = scan.summary;
+  const { scan, albums, mergeSuggestions } = session;  const summary = scan.summary;
   const reviewable = albums.filter(
     (album) => album.status === "needs-review" || album.status === "error",
   );
@@ -84,35 +71,22 @@ export function LibraryView({
   );
   const scanning = scan.phase === "scanning";
 
-  const albumsWithMissing = useMemo(
-    () => albums.filter((album) => missingTrackCount(album) > 0).length,
-    [albums],
+  const visible = useMemo(
+    () => applyQueueOptions(albums, queueOptions),
+    [albums, queueOptions],
   );
-
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const rows = albums
-      .filter((album) => matchesFilter(album, filter))
-      .filter((album) => !hideMissing || missingTrackCount(album) === 0)
-      .filter((album) => {
-        if (!needle) return true;
-        return [album.folderName, album.hints.artist, album.hints.album, album.path]
-          .filter(Boolean)
-          .some((value) => value?.toLowerCase().includes(needle));
-      });
-    if (sort === "scan") return rows;
-    const direction = sort === "tracks-desc" ? -1 : 1;
-    return [...rows].sort((a, b) => direction * (a.tracks.length - b.tracks.length));
-  }, [albums, filter, hideMissing, query, sort]);
-
-  const counts = {
-    all: albums.length,
-    review: reviewable.length,
-    auto: albums.filter((album) => album.status === "auto-matched").length,
-    confirmed: albums.filter((album) => album.status === "confirmed").length,
-    applied: albums.filter((album) => album.status === "applied").length,
-    skipped: albums.filter((album) => album.status === "skipped").length,
-  } satisfies Record<Filter, number>;
+  // Suggestions are recomputed by the server, but an apply run can finish while
+  // this page is open; hide any suggestion that still points at applied albums.
+  const activeMergeSuggestions = useMemo(
+    () =>
+      mergeSuggestions.filter((suggestion) =>
+        suggestion.albumIds.every((id) => {
+          const album = albums.find((entry) => entry.id === id);
+          return album !== undefined && album.status !== "applied";
+        }),
+      ),
+    [albums, mergeSuggestions],
+  );
 
   return (
     <div className="view library-view">
@@ -241,6 +215,82 @@ export function LibraryView({
         </div>
       </section>
 
+      {activeMergeSuggestions.length > 0 && (
+        <section className="panel merge-panel">
+          <div className="section-heading tight">
+            <div>
+              <div className="eyebrow">Folder merge</div>
+              <h2>Albums found in several folders</h2>
+            </div>
+            <span className="chip">
+              {activeMergeSuggestions.length} suggestion
+              {activeMergeSuggestions.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p className="muted small">
+            These folders look like the same release, either split across discs or duplicated in
+            another location. Merge them so every file is matched, deduplicated, and saved as
+            one album.
+          </p>
+          <div className="merge-suggestions">
+            {activeMergeSuggestions.map((suggestion) => {
+              const key = suggestion.albumIds.join(":");
+              const open = expandedMerges.has(key);
+              const names = suggestion.albumIds.map(
+                (id) => albums.find((album) => album.id === id)?.folderName ?? id,
+              );
+              const folders = suggestion.albumIds
+                .map((id) => albums.find((album) => album.id === id))
+                .filter((album): album is NonNullable<typeof album> => album !== undefined);
+              return (
+                <div key={key} className="merge-suggestion-block">
+                  <div className="merge-suggestion">
+                    <div className="merge-suggestion-copy">
+                      <strong>{names.join(" + ")}</strong>
+                      <span className="muted tiny">{suggestion.reason}</span>
+                    </div>
+                    <div className="merge-suggestion-actions">
+                      <button
+                        className="link-button"
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => toggleMergeExpanded(key)}
+                      >
+                        {open ? "Hide tracks" : "Show tracks"}
+                      </button>
+                      <button
+                        className="button small"
+                        disabled={busy}
+                        onClick={() => onMerge(suggestion.albumIds)}
+                      >
+                        Merge {suggestion.albumIds.length} folders
+                      </button>
+                    </div>
+                  </div>
+                  {open && (
+                    <div className="merge-suggestion-tracks">
+                      {folders.map((folder) => (
+                        <div key={folder.id} className="merge-folder-tracks">
+                          <div className="merge-folder-head">
+                            <span className="ellipsis mono tiny" title={folder.path}>
+                              {folder.folderName}
+                            </span>
+                            <span className="chip">
+                              {folder.tracks.length} file{folder.tracks.length === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                          <FolderTracks album={folder} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {albums.length > 0 && (
         <section className="panel albums-panel">
           <div className="panel-head">
@@ -262,69 +312,30 @@ export function LibraryView({
             </div>
           </div>
 
-          <div className="toolbar">
-            <div className="filter-tabs">
-              {FILTERS.map((entry) => (
-                <button
-                  key={entry.id}
-                  className={filter === entry.id ? "filter-tab active" : "filter-tab"}
-                  onClick={() => setFilter(entry.id)}
-                >
-                  {entry.label}
-                  <span className="filter-count">{counts[entry.id]}</span>
-                </button>
-              ))}
-            </div>
-            <div className="toolbar-options">
-              <button
-                className={hideMissing ? "filter-tab active" : "filter-tab"}
-                aria-pressed={hideMissing}
-                title={
-                  hideMissing
-                    ? "Showing only albums with every release track present"
-                    : "Hide albums where the selected release has tracks with no local file"
-                }
-                onClick={() => setHideMissing((current) => !current)}
-              >
-                Hide missing tracks
-                <span className="filter-count">{albumsWithMissing}</span>
-              </button>
-              <label className="sort-select">
-                <span className="muted tiny">Sort</span>
-                <select
-                  value={sort}
-                  onChange={(event) => setSort(event.target.value as Sort)}
-                  aria-label="Sort albums"
-                >
-                  {SORTS.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {entry.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <input
-                className="search-input"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter albums…"
-                aria-label="Filter albums"
-              />
-            </div>
-          </div>
+          <QueueToolbar
+            albums={albums}
+            options={queueOptions}
+            onChange={onQueueOptionsChange}
+          />
 
           <div className="album-table">
             {visible.length === 0 && (
               <p className="empty-row">
                 No albums in this view.{" "}
-                {filter !== "all" && (
-                  <button className="link-button" onClick={() => setFilter("all")}>
+                {queueOptions.filter !== "all" && (
+                  <button
+                    className="link-button"
+                    onClick={() => onQueueOptionsChange({ filter: "all" })}
+                  >
                     Show all
                   </button>
                 )}
-                {filter !== "all" && hideMissing && " · "}
-                {hideMissing && (
-                  <button className="link-button" onClick={() => setHideMissing(false)}>
+                {queueOptions.filter !== "all" && queueOptions.hideMissing && " · "}
+                {queueOptions.hideMissing && (
+                  <button
+                    className="link-button"
+                    onClick={() => onQueueOptionsChange({ hideMissing: false })}
+                  >
                     Include albums with missing tracks
                   </button>
                 )}
@@ -332,6 +343,7 @@ export function LibraryView({
             )}
             {visible.map((album) => {
               const missing = missingTrackCount(album);
+              const duplicateGroups = applyDedupeIgnores(album.duplicates, album.dedupeIgnores).length;
               return (
                 <button
                   key={album.id}
@@ -343,9 +355,17 @@ export function LibraryView({
                     <div className="album-title-line">
                       <span className="album-folder">{album.folderName}</span>
                       <StatusChip status={album.status as AlbumStatus} confidence={album.confidence} />
-                      {album.duplicates.length > 0 && (
+                      {duplicateGroups > 0 && (
                         <span className="chip dupe-chip">
-                          {album.duplicates.length} dupe{album.duplicates.length === 1 ? "" : "s"}
+                          {duplicateGroups} dupe{duplicateGroups === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {album.sourceFolders && album.sourceFolders.length > 1 && (
+                        <span
+                          className="chip merge-chip"
+                          title={album.sourceFolders.join("\n")}
+                        >
+                          {album.sourceFolders.length} folders
                         </span>
                       )}
                       {missing > 0 && (

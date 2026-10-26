@@ -10,24 +10,29 @@ import {
 } from "../../deezer";
 import { MusicBrainzClient } from "../../musicbrainz";
 import { cleanArtistName } from "../../model/artist";
+import { applyDedupeIgnores } from "../../model/dedupe";
 import {
   albumIdFor,
   applyAlbum,
   chooseKeeper,
+  containerHintsFor,
   duplicatePaths,
   enumerateAlbumFolders,
   expandHome,
+  findMergeGroups,
+  mergeAlbums as mergeAlbumFolders,
   scanAlbumFolder,
   uniqueTracks,
   type CoverArt,
 } from "../../library";
-import { autoMap, isHighConfidence, rankReleases, similarity } from "../../matching";
+import { autoMap, compareAlbumsForMerge, isHighConfidence, rankReleases, similarity } from "../../matching";
 import type {
   AlbumFolder,
   ApplyResult,
   ApplyState,
   DiscogsIdentity,
   DiscogsRelease,
+  DuplicateGroup,
   FolderListing,
   LocalImage,
   MatchCandidate,
@@ -106,6 +111,7 @@ function emptySession(rootFolder: string): SessionView {
     scan: emptyScan(rootFolder),
     apply: emptyApply(),
     albums: [],
+    mergeSuggestions: [],
   };
 }
 
@@ -411,6 +417,11 @@ export class AppState {
     return album;
   }
 
+  /** Duplicate groups with the user's "not a duplicate" overrides applied. */
+  private duplicateGroups(album: AlbumFolder): DuplicateGroup[] {
+    return applyDedupeIgnores(album.duplicates, album.dedupeIgnores);
+  }
+
   async confirm(
     albumId: string,
     input: {
@@ -439,7 +450,7 @@ export class AppState {
       provided.set(entry.filePath, value);
     }
 
-    const losers = duplicatePaths(album.duplicates);
+    const losers = duplicatePaths(this.duplicateGroups(album));
     const trackIds = new Set(release.tracklist.map((track) => track.index));
     const mapping: TrackAssignment[] = album.tracks.map((track) => {
       if (losers.has(track.path)) {
@@ -526,30 +537,185 @@ export class AppState {
     const album = this.albumOrThrow(albumId);
     if (album.status === "applied") throw new AppError(409, "This album has already been applied");
 
-    const group = album.duplicates.find((entry) => entry.key === key);
+    const group = this.duplicateGroups(album).find((entry) => entry.key === key);
     if (!group) throw new AppError(404, "Duplicate group not found");
     if (!group.members.some((member) => member.path === keepPath)) {
       throw new AppError(400, "That file is not part of this duplicate group");
     }
 
     album.duplicates = chooseKeeper(album.duplicates, key, keepPath);
-    const selected = [...album.candidates, ...album.deezerCandidates].find(
-      (entry) => entry.release.id === album.selectedReleaseId,
-    );
-    if (selected) {
-      album.mapping = this.mappingFor(album, selected.release);
-    } else {
-      album.mapping = album.tracks.map((track) => ({
-        filePath: track.path,
-        trackIndex: null,
-      }));
-    }
+    this.remapFromSelection(album);
     album.status = "needs-review";
     album.autoMatched = false;
     album.updatedAt = new Date().toISOString();
     this.refreshSummary();
     await this.saveSession();
     return album;
+  }
+
+  /**
+   * Mark a file as "not a duplicate" so it can be mapped and transferred, or
+   * put it back into duplicate detection.
+   */
+  async setDedupeIgnore(
+    albumId: string,
+    filePath: string,
+    ignored = true,
+  ): Promise<AlbumFolder> {
+    if (this.applyRunning) throw new AppError(409, "Wait for the apply job to finish");
+    const album = this.albumOrThrow(albumId);
+    if (album.status === "applied") throw new AppError(409, "This album has already been applied");
+    if (!album.tracks.some((track) => track.path === filePath)) {
+      throw new AppError(404, "That file is not part of this album");
+    }
+
+    const ignores = new Set(album.dedupeIgnores ?? []);
+    if (ignored) {
+      if (!this.duplicateGroups(album).some((group) =>
+        group.members.some((member) => member.path === filePath),
+      )) {
+        throw new AppError(400, "That file is not currently treated as a duplicate");
+      }
+      ignores.add(filePath);
+    } else {
+      if (!ignores.has(filePath)) {
+        throw new AppError(400, "That file is not marked as a separate track");
+      }
+      ignores.delete(filePath);
+    }
+    album.dedupeIgnores = ignores.size > 0 ? [...ignores] : undefined;
+
+    this.remapFromSelection(album);
+    album.status = "needs-review";
+    album.autoMatched = false;
+    album.updatedAt = new Date().toISOString();
+    this.refreshSummary();
+    await this.saveSession();
+    return album;
+  }
+
+  /**
+   * Fold several scanned folders into one album. The first id owns the merged
+   * album so the caller can keep showing it; the other folders leave the queue.
+   */
+  async mergeAlbums(albumIds: string[]): Promise<SessionView> {
+    if (this.scanRunning) throw new AppError(409, "Wait for the scan to finish");
+    if (this.applyRunning) throw new AppError(409, "Wait for the apply job to finish");
+
+    const uniqueIds = [...new Set(albumIds)];
+    if (uniqueIds.length < 2) {
+      throw new AppError(400, "Choose at least two albums to merge");
+    }
+    const albums = uniqueIds.map((id) => this.albumOrThrow(id));
+    if (albums.some((album) => album.status === "applied")) {
+      throw new AppError(409, "Applied albums cannot be merged");
+    }
+    const empty = albums.find((album) => album.tracks.length === 0);
+    if (empty) {
+      throw new AppError(400, `"${empty.folderName}" has no audio files to merge`);
+    }
+    for (let i = 0; i < albums.length; i += 1) {
+      for (let j = i + 1; j < albums.length; j += 1) {
+        const left = albums[i];
+        const right = albums[j];
+        if (!left || !right) continue;
+        if (!compareAlbumsForMerge(left, right)) {
+          throw new AppError(
+            400,
+            `"${right.folderName}" does not look like the same album as "${left.folderName}". Merging only combines copies or disc splits of one release.`,
+          );
+        }
+      }
+    }
+
+    const merged = mergeAlbumFolders(albums);
+    const selected = [...merged.candidates, ...merged.deezerCandidates].find(
+      (entry) => entry.release.id === merged.selectedReleaseId,
+    );
+    merged.mapping = selected
+      ? this.mappingFor(merged, selected.release)
+      : merged.tracks.map((track) => ({ filePath: track.path, trackIndex: null }));
+
+    const keepIndex = this.session.albums.findIndex((album) => album.id === merged.id);
+    const removed = new Set(uniqueIds);
+    const remaining = this.session.albums.filter((album) => !removed.has(album.id));
+    remaining.splice(Math.max(0, Math.min(keepIndex, remaining.length)), 0, merged);
+    this.session.albums = remaining;
+
+    this.refreshSummary();
+    this.refreshMergeSuggestions();
+    await this.saveSession();
+    return this.session;
+  }
+
+  /**
+   * Undo a merge: re-scan every source folder and put the parts back, carrying
+   * the release choice so they do not need a fresh lookup.
+   */
+  async unmergeAlbum(albumId: string): Promise<SessionView> {
+    if (this.scanRunning) throw new AppError(409, "Wait for the scan to finish");
+    if (this.applyRunning) throw new AppError(409, "Wait for the apply job to finish");
+
+    const album = this.albumOrThrow(albumId);
+    if (album.status === "applied") {
+      throw new AppError(409, "Applied albums cannot be split");
+    }
+    const sources = album.sourceFolders ?? [];
+    if (sources.length < 2) {
+      throw new AppError(400, "This album is not merged from several folders");
+    }
+
+    const parts: AlbumFolder[] = [];
+    for (const source of sources) {
+      let part: AlbumFolder;
+      try {
+        part = await scanAlbumFolder(source, {
+          artCacheDir: this.artCacheDir,
+          artistHint: album.hints.artist,
+          containerHints: containerHintsFor(source, {
+            artistHint: album.hints.artist,
+            rootFolder: this.session.scan.rootFolder,
+          }),
+        });
+      } catch (error) {
+        part = emptyAlbum(source, `Could not read folder: ${messageOf(error)}`);
+      }
+
+      // The release choice is the same for every part; keep it so the user
+      // does not have to look it up again for each folder.
+      part.candidates = album.candidates;
+      part.deezerCandidates = album.deezerCandidates;
+      part.deezerCandidatesLoaded = album.deezerCandidatesLoaded;
+      part.selectedReleaseId = album.selectedReleaseId;
+      part.confidence = album.confidence;
+      part.deezer = album.deezer;
+      part.musicbrainz = album.musicbrainz;
+      if (
+        album.coverOverride &&
+        part.images.some((image) => image.path === album.coverOverride)
+      ) {
+        part.coverOverride = album.coverOverride;
+      }
+      if (part.tracks.length > 0) {
+        const selected = [...part.candidates, ...part.deezerCandidates].find(
+          (entry) => entry.release.id === part.selectedReleaseId,
+        );
+        part.mapping = selected
+          ? this.mappingFor(part, selected.release)
+          : part.tracks.map((track) => ({ filePath: track.path, trackIndex: null }));
+        part.status = "needs-review";
+        part.error = undefined;
+      }
+      part.updatedAt = new Date().toISOString();
+      parts.push(part);
+    }
+
+    const index = this.session.albums.findIndex((entry) => entry.id === albumId);
+    if (index !== -1) this.session.albums.splice(index, 1, ...parts);
+    this.refreshSummary();
+    this.refreshMergeSuggestions();
+    await this.saveSession();
+    return this.session;
   }
 
   async beginApply(): Promise<SessionView> {
@@ -644,6 +810,7 @@ export class AppState {
           album = await scanAlbumFolder(location.path, {
             artCacheDir: this.artCacheDir,
             artistHint: location.artistHint,
+            containerHints: location.containerHints,
           });
         } catch (error) {
           album = emptyAlbum(location.path, `Could not read folder: ${messageOf(error)}`);
@@ -680,6 +847,8 @@ export class AppState {
       this.refreshSummary();
       await this.saveSession();
     } finally {
+      this.refreshMergeSuggestions();
+      await this.saveSession();
       this.scanRunning = false;
     }
   }
@@ -687,7 +856,7 @@ export class AppState {
   private async matchAlbum(album: AlbumFolder, options: MatchOptions): Promise<void> {
     album.deezerCandidates = [];
     album.deezerCandidatesLoaded = false;
-    const unique = uniqueTracks(album.tracks, album.duplicates);
+    const unique = uniqueTracks(album.tracks, this.duplicateGroups(album));
     if (unique.length === 0) {
       album.status = "needs-review";
       album.error = "No unique audio tracks found";
@@ -838,7 +1007,7 @@ export class AppState {
       ? Number.parseInt(releaseMatch[1], 10)
       : await client.getMasterMainRelease(Number.parseInt(masterMatch?.[1] ?? "0", 10));
     const release = await client.getRelease(releaseId);
-    const unique = uniqueTracks(album.tracks, album.duplicates);
+    const unique = uniqueTracks(album.tracks, this.duplicateGroups(album));
     const local = {
       artist: album.hints.artist,
       album: album.hints.album,
@@ -881,7 +1050,7 @@ export class AppState {
     if (tracks.length === 0) throw new AppError(404, "That Deezer album has no tracks");
     const release = deezerRelease(info, tracks);
 
-    const unique = uniqueTracks(album.tracks, album.duplicates);
+    const unique = uniqueTracks(album.tracks, this.duplicateGroups(album));
     const local = {
       artist: album.hints.artist,
       album: album.hints.album,
@@ -917,7 +1086,7 @@ export class AppState {
     album: AlbumFolder,
     options: { artist?: string; album?: string } = {},
   ): Promise<void> {
-    const unique = uniqueTracks(album.tracks, album.duplicates);
+    const unique = uniqueTracks(album.tracks, this.duplicateGroups(album));
     if (unique.length === 0) {
       album.status = "needs-review";
       album.error = "No unique audio tracks found";
@@ -1045,11 +1214,21 @@ export class AppState {
     }
   }
 
+  /** Recompute the stored mapping for the album's currently selected release. */
+  private remapFromSelection(album: AlbumFolder): void {
+    const selected = [...album.candidates, ...album.deezerCandidates].find(
+      (entry) => entry.release.id === album.selectedReleaseId,
+    );
+    album.mapping = selected
+      ? this.mappingFor(album, selected.release)
+      : album.tracks.map((track) => ({ filePath: track.path, trackIndex: null }));
+  }
+
   private mappingFor(album: AlbumFolder, release: DiscogsRelease): TrackAssignment[] {
-    const unique = uniqueTracks(album.tracks, album.duplicates);
+    const unique = uniqueTracks(album.tracks, this.duplicateGroups(album));
     const auto = autoMap(unique, release.tracklist);
     const byPath = new Map(auto.map((entry) => [entry.filePath, entry]));
-    const losers = duplicatePaths(album.duplicates);
+    const losers = duplicatePaths(this.duplicateGroups(album));
     return album.tracks.map((track) => {
       if (losers.has(track.path)) {
         return { filePath: track.path, trackIndex: null };
@@ -1132,6 +1311,8 @@ export class AppState {
       apply.finishedAt = new Date().toISOString();
       await this.saveSession();
     } finally {
+      this.refreshMergeSuggestions();
+      await this.saveSession();
       this.applyRunning = false;
     }
   }
@@ -1304,6 +1485,11 @@ export class AppState {
     }
   }
 
+  /** Recompute which folders look like the same release. */
+  private refreshMergeSuggestions(): void {
+    this.session.mergeSuggestions = findMergeGroups(this.session.albums);
+  }
+
   private async loadSession(): Promise<SessionView> {
     try {
       const raw = JSON.parse(await readFile(this.sessionFile, "utf8")) as Partial<SessionView>;
@@ -1363,7 +1549,12 @@ export class AppState {
         }
       }
 
-      const session: SessionView = { scan, apply, albums };
+      const session: SessionView = {
+        scan,
+        apply,
+        albums,
+        mergeSuggestions: findMergeGroups(albums),
+      };
       session.scan.summary = summarize(albums);
       return session;
     } catch {

@@ -65,16 +65,23 @@ function looksDuplicate(a: LocalTrack, b: LocalTrack): boolean {
   if (!durationCompatible(a, b)) return false;
   const titleA = identityTitle(a);
   const titleB = identityTitle(b);
+  const sameFolder = path.dirname(a.path) === path.dirname(b.path);
   const sameNumber =
-    a.track !== undefined && b.track !== undefined && a.track === b.track;
+    a.track !== undefined &&
+    b.track !== undefined &&
+    a.track === b.track &&
+    (a.disc ?? 1) === (b.disc ?? 1);
   const titleScore = titleA && titleB ? trackSimilarity(titleA, titleB) : 0;
 
   if (sameNumber) {
     // Same track number is strong evidence, but only when titles agree or the
-    // durations line up closely.
-    if (!titleA || !titleB) return true;
+    // durations line up closely. Durations alone are ambiguous across folders:
+    // disc 1's "Intro" and disc 2's "Intro" can share a number and a length
+    // without being the same recording, so cross-folder identity needs titles.
+    if (!titleA || !titleB) return sameFolder;
     if (titleScore >= 0.5) return true;
     if (
+      sameFolder &&
       a.duration !== undefined &&
       b.duration !== undefined &&
       Math.abs(a.duration - b.duration) <= 3
