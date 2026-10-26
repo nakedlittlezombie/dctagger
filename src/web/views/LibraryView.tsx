@@ -11,6 +11,14 @@ import { artUrl } from "../api-client";
 
 type Filter = "all" | "review" | "auto" | "confirmed" | "applied" | "skipped";
 
+type Sort = "scan" | "tracks-desc" | "tracks-asc";
+
+const SORTS: Array<{ id: Sort; label: string }> = [
+  { id: "scan", label: "Scan order" },
+  { id: "tracks-desc", label: "Tracks: most first" },
+  { id: "tracks-asc", label: "Tracks: fewest first" },
+];
+
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All" },
   { id: "review", label: "Needs review" },
@@ -57,6 +65,8 @@ export function LibraryView({
   const [root, setRoot] = useState(settings.rootFolder || session.scan.rootFolder || "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [hideMissing, setHideMissing] = useState(false);
+  const [sort, setSort] = useState<Sort>("scan");
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -74,17 +84,26 @@ export function LibraryView({
   );
   const scanning = scan.phase === "scanning";
 
+  const albumsWithMissing = useMemo(
+    () => albums.filter((album) => missingTrackCount(album) > 0).length,
+    [albums],
+  );
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return albums
+    const rows = albums
       .filter((album) => matchesFilter(album, filter))
+      .filter((album) => !hideMissing || missingTrackCount(album) === 0)
       .filter((album) => {
         if (!needle) return true;
         return [album.folderName, album.hints.artist, album.hints.album, album.path]
           .filter(Boolean)
           .some((value) => value?.toLowerCase().includes(needle));
       });
-  }, [albums, filter, query]);
+    if (sort === "scan") return rows;
+    const direction = sort === "tracks-desc" ? -1 : 1;
+    return [...rows].sort((a, b) => direction * (a.tracks.length - b.tracks.length));
+  }, [albums, filter, hideMissing, query, sort]);
 
   const counts = {
     all: albums.length,
@@ -256,13 +275,42 @@ export function LibraryView({
                 </button>
               ))}
             </div>
-            <input
-              className="search-input"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Filter albums…"
-              aria-label="Filter albums"
-            />
+            <div className="toolbar-options">
+              <button
+                className={hideMissing ? "filter-tab active" : "filter-tab"}
+                aria-pressed={hideMissing}
+                title={
+                  hideMissing
+                    ? "Showing only albums with every release track present"
+                    : "Hide albums where the selected release has tracks with no local file"
+                }
+                onClick={() => setHideMissing((current) => !current)}
+              >
+                Hide missing tracks
+                <span className="filter-count">{albumsWithMissing}</span>
+              </button>
+              <label className="sort-select">
+                <span className="muted tiny">Sort</span>
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as Sort)}
+                  aria-label="Sort albums"
+                >
+                  {SORTS.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <input
+                className="search-input"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Filter albums…"
+                aria-label="Filter albums"
+              />
+            </div>
           </div>
 
           <div className="album-table">
@@ -272,6 +320,12 @@ export function LibraryView({
                 {filter !== "all" && (
                   <button className="link-button" onClick={() => setFilter("all")}>
                     Show all
+                  </button>
+                )}
+                {filter !== "all" && hideMissing && " · "}
+                {hideMissing && (
+                  <button className="link-button" onClick={() => setHideMissing(false)}>
+                    Include albums with missing tracks
                   </button>
                 )}
               </p>

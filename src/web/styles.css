@@ -1118,6 +1118,34 @@ p {
   padding: 0 4px;
 }
 
+.toolbar-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sort-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sort-select select {
+  height: 30px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  outline: none;
+}
+
+.sort-select select:focus {
+  border-color: var(--cyan);
+}
+
 .search-input {
   width: 230px;
   height: 30px;
@@ -2892,6 +2920,18 @@ p {
 
   .search-input {
     width: 100%;
+  }
+
+  .toolbar-options {
+    width: 100%;
+  }
+
+  .sort-select {
+    flex: 1;
+  }
+
+  .sort-select select {
+    flex: 1;
   }
 
   .filter-tabs {
